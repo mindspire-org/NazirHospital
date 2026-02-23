@@ -18,14 +18,6 @@ app.get('/health', (_req: Request, res: Response) => res.json({ ok: true }))
 
 app.use('/api', apiRouter)
 
-// Serve built frontend (root/dist) for all non-API routes
-const publicDir = path.join(__dirname, '..', '..', 'dist')
-app.use(express.static(publicDir))
-app.get('*', (req: Request, res: Response, next) => {
-  if (req.path.startsWith('/api')) return next()
-  try { return res.sendFile(path.join(publicDir, 'index.html')) } catch { return next() }
-})
-
 app.use(errorHandler)
 
 export default app
