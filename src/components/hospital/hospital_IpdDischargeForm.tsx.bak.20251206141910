@@ -1,0 +1,148 @@
+import { useEffect, useMemo, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import Hospital_PrintHeader from './hospital_PrintHeader';
+import { hospitalApi } from '../../utils/api';
+
+type SummaryForm = { diagnosis?: string; courseInHospital?: string; procedures?: string; conditionAtDischarge?: string; medications?: string; advice?: string; followUpDate?: string; notes?: string };
+
+export default function Discharged(){
+  const { id } = useParams();
+  const [encounterId, setEncounterId] = useState<string>('');
+  const [patient, setPatient] = useState<any>({});
+  const [summary, setSummary] = useState<SummaryForm>({});
+  const [brand, setBrand] = useState<any>({});
+
+  // Load discharged IPD admissions (read-only) - only credit/corporate patients
+  useEffect(()=>{ setLoading(true); (async()=>{
+    try {
+      const res = await api.get<AdmissionLite[]>(`/ipd/admissions`, { params: { status: 'Discharged', light: 1, billingType: 'credit' } });
+      const arr = Array.isArray(res.data) ? res.data : (res.data as any);
+      const only = (arr || [])
+        .filter(a => a.status === 'Discharged' && !!a.dischargeDateTime && a.billingType === 'credit')
+        .sort((a,b)=> new Date(b.dischargeDateTime || 0).getTime() - new Date(a.dischargeDateTime || 0).getTime());
+      setAdmissions(only);
+    } finally { setLoading(false); }
+  })(); },[]);
+
+  // Read-only view; no actions here.
+
+  const filtered = useMemo(()=> admissions.filter(a=>{
+    const p: any = a.patientId;
+    const name = (typeof p === 'object' ? (p?.name||'') : '') as string;
+    const mr = (typeof p === 'object' ? (p?.mrNumber || p?.mrn || '') : '') as string;
+    const query = q.toLowerCase();
+    return name.toLowerCase().includes(query) || mr.toLowerCase().includes(query);
+  }), [q, admissions]);
+  // KPIs
+  const kpis = useMemo(()=>{
+    const total = admissions.length;
+    const discharged = admissions.length;
+    const active = 0;
+    return { total, active, discharged };
+  }, [admissions]);
+
+  // Helper: initials from full name
+  const getInitials = (n?: string) => {
+    const s = (n || '').trim();
+    if (!s) return '??';
+    const parts = s.split(/\s+/).slice(0, 2);
+    return parts.map(p => p[0]?.toUpperCase()).join('');
+  };
+
+  // Discharge and billing actions have been removed from this panel view.
+
+  // confirmDischarge removed
+
+  // Save a Short Stay record using fields available in this discharge form
+  // saveShortStay removed
+
+  return (
+    <div className="space-y-4 overflow-x-hidden">
+      {/* Top colorful banner */}
+      <div className="relative overflow-hidden rounded-xl p-4 md:p-5 bg-gradient-to-br from-emerald-600 via-teal-600 to-green-600 text-white shadow-sm">
+        <div className="absolute -right-10 -top-10 h-32 w-32 bg-white/20 rounded-full blur-2xl" />
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="shrink-0 grid place-items-center w-10 h-10 rounded-full bg-white/20">
+              <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+                <path d="M6 8h12M6 12h8M6 16h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+              </svg>
+            </div>
+            <div>
+              <div className="text-lg md:text-xl font-semibold tracking-tight">Discharged Corporate Patients</div>
+              <div className="text-white/90 text-xs md:text-sm">View discharged IPD patients with credit/corporate billing</div>
+            </div>
+          </div>
+          <div className="hidden sm:flex items-center gap-2.5">
+            <div className="px-2 py-1 rounded-lg bg-white/15 text-[11px]">Total: <span className="font-semibold">{kpis.total}</span></div>
+            <div className="px-2 py-1 rounded-lg bg-white/15 text-[11px]">Discharged: <span className="font-semibold">{kpis.discharged}</span></div>
+          </div>
+        </div>
+      </div>
+
+      {/* Controls */}
+      <div className="bg-white/95 border border-emerald-100/70 rounded-xl p-4 shadow-sm">
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-1.5 h-5 rounded bg-gradient-to-b from-emerald-600 to-teal-500" />
+          <h2 className="font-semibold text-lg tracking-tight">Filters</h2>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by name or MRN" className="border border-emerald-200 rounded-lg px-3 py-2 w-full sm:w-auto max-w-xs" />
+        </div>
+      </div>
+
+      {loading && <div className="mt-3 text-sm text-slate-500">Loading...</div>}
+      <div className="relative overflow-hidden rounded-xl p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 shadow-sm">
+        <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-emerald-200/30 blur-2xl" />
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-sm table-auto min-w-[900px]">
+            <thead className="bg-white/50">
+              <tr className="text-left text-slate-600">
+                <th className="py-2 px-2">MRN</th>
+                <th className="px-2">Name</th>
+                <th className="px-2">Phone</th>
+                <th className="px-2">Treatment</th>
+                <th className="px-2">Corporate Panel</th>
+                <th className="px-2">Status</th>
+                <th className="px-2">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(a=> {
+                const p: any = a.patientId;
+                const pid = typeof p === 'object' ? p._id : p;
+                const mr = typeof p === 'object' ? (p?.mrNumber || p?.mrn || '—') : '—';
+                const phone = typeof p === 'object' ? (p?.phone || '—') : '—';
+                const name = typeof p === 'object' ? (p?.name || 'Unknown') : 'Unknown';
+                return (
+                  <tr key={a._id} className="border-t border-emerald-100 hover:bg-white/60">
+                    <td className="py-2 px-2 font-mono text-xs text-slate-600">{mr}</td>
+                    <td className="px-2">
+                      <div className="flex items-center gap-2">
+                        <div className="shrink-0 w-6 h-6 rounded-full bg-gradient-to-br from-emerald-600 to-teal-600 text-white grid place-items-center text-[10px] font-semibold">
+                          {getInitials(name)}
+                        </div>
+                        <span>{name}</span>
+                      </div>
+                    </td>
+                    <td className="px-2">{phone}</td>
+                    <td className="px-2">{a.admittingDiagnosis || '—'}</td>
+                    <td className="px-2">
+                      <span className="text-xs text-blue-700 bg-blue-100 border border-blue-200 px-2 py-0.5 rounded-full">
+                        {a.corporateName || 'Corporate'}
+                      </span>
+                    </td>
+                    <td className="px-2"><span className="text-xs text-emerald-700 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full">{a.status}</span></td>
+                    <td className="px-2">
+                      <NavLink to={`/ipd/patients/${pid}`} className="text-xs px-2 py-1 rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 truncate">View Profile</NavLink>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Ultra‑Modern Prescription | HMS</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    /* ==================================================
+       ULTRA‑MODERN / UNIQUE PRESCRIPTION DESIGN
+       Print‑friendly but visually premium
+       ================================================== */
+
+    :root{
+      --ink:#0a0f2c;
+      --muted:#6b7390;
+      --primary:#4f46e5;     /* indigo */
+      --secondary:#06b6d4;   /* cyan */
+      --accent:#22c55e;      /* green */
+      --danger:#ef4444;      /* rx red */
+      --paper:#ffffff;
+      --bg:#eef1f7;
+      --radius-xl:20px;
+      --radius-lg:16px;
+      --radius-md:12px;
+    }
+
+    *{box-sizing:border-box}
+    body{
+      margin:0;padding:24px;
+      background: radial-gradient(circle at top, #f5f7ff, var(--bg));
+      font-family:Poppins,system-ui;
+      color:var(--ink);
+    }
+
+    /* A4 canvas */
+    .page{
+      width:210mm;
+      min-height:297mm;
+      margin:auto;
+      background:var(--paper);
+      border-radius:var(--radius-xl);
+      box-shadow:0 40px 80px rgba(15,23,42,.18);
+      overflow:hidden;
+      position:relative;
+    }
+
+    /* futuristic background geometry */
+    .page::before{
+      content:"";
+      position:absolute;inset:0;
+      background:
+        radial-gradient(circle at 90% 10%, rgba(79,70,229,.12), transparent 40%),
+        radial-gradient(circle at 10% 90%, rgba(6,182,212,.10), transparent 45%);
+      pointer-events:none;
+    }
+
+    /* HEADER */
+    header{
+      display:grid;
+      grid-template-columns:110px 1fr auto;
+      gap:20px;
+      padding:26px 28px 20px;
+      position:relative;
+      z-index:2;
+    }
+
+    .logo{
+      width:100px;height:100px;
+      border-radius:24px;
+      background:conic-gradient(from 120deg,var(--primary),var(--secondary),var(--accent),var(--primary));
+      display:flex;align-items:center;justify-content:center;
+      color:white;font-size:32px;font-weight:900;
+      box-shadow:0 24px 48px rgba(79,70,229,.35);
+    }
+
+    .hospital h1{
+      margin:0;font-size:22px;font-weight:800;letter-spacing:.4px;
+    }
+    .hospital p{
+      margin:4px 0 0;font-size:13px;color:var(--muted);
+    }
+
+    .doc-meta{
+      text-align:right;font-size:12px;color:var(--muted);
+    }
+
+    /* INFO STRIP */
+    .strip{
+      margin:0 28px;
+      background:linear-gradient(90deg,var(--primary),var(--secondary));
+      border-radius:18px;
+      padding:18px;
+      color:white;
+      display:grid;
+      grid-template-columns:2fr 1fr;
+      gap:20px;
+      box-shadow:0 20px 40px rgba(79,70,229,.25);
+    }
+
+    .patient b{font-weight:600}
+    .patient div{font-size:13px;opacity:.95}
+
+    /* VITALS – futuristic cards */
+    .vitals{
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:12px;
+    }
+
+    .vital{
+      background:rgba(255,255,255,.22);
+      backdrop-filter:blur(6px);
+      border-radius:14px;
+      padding:12px 10px;
+      text-align:center;
+    }
+
+    .vital span{display:block;font-size:11px;opacity:.85}
+    .vital strong{font-size:16px;font-weight:700}
+
+    /* RX SECTION */
+    .rx{
+      margin:26px 28px;
+      background:#fff;
+      border-radius:22px;
+      padding:26px;
+      position:relative;
+      box-shadow:0 30px 60px rgba(15,23,42,.12);
+    }
+
+    .rx::before{
+      content:"Rx";
+      position:absolute;
+      right:26px;top:-24px;
+      background:linear-gradient(135deg,var(--danger),#fb7185);
+      color:white;
+      padding:14px 22px;
+      border-radius:18px;
+      font-size:22px;font-weight:900;
+      box-shadow:0 20px 40px rgba(239,68,68,.35);
+    }
+
+    .rx-grid{
+      display:grid;
+      grid-template-columns:3fr 1fr;
+      gap:26px;
+    }
+
+    /* Medicine list – looks like design canvas */
+    .meds{
+      min-height:420px;
+      border-radius:18px;
+      padding:18px 20px;
+      background:
+        repeating-linear-gradient(to bottom,
+          rgba(79,70,229,.06) 0px,
+          rgba(79,70,229,.06) 1px,
+          transparent 1px,
+          transparent 34px);
+    }
+
+    table{width:100%;border-collapse:collapse}
+    th{
+      text-align:left;font-size:12px;color:var(--muted);
+      padding-bottom:10px;
+    }
+    td{
+      padding:12px 0;font-size:14px;border-bottom:1px dashed rgba(15,23,42,.08)
+    }
+    td strong{font-weight:600}
+
+    /* SIDE PANEL */
+    .side{
+      display:flex;flex-direction:column;gap:18px;
+    }
+
+    .panel{
+      background:linear-gradient(180deg,#f8faff,#ffffff);
+      border-radius:18px;
+      padding:16px;
+      box-shadow:0 18px 36px rgba(15,23,42,.10);
+    }
+
+    .panel h4{margin:0 0 8px;font-size:13px}
+    .panel p{margin:0;font-size:12px;color:var(--muted)}
+
+    /* FOOTER */
+    footer{
+      display:grid;
+      grid-template-columns:1fr auto;
+      gap:20px;
+      padding:22px 28px 28px;
+      align-items:end;
+    }
+
+    .note{font-size:11px;color:var(--muted)}
+
+    .sign{
+      text-align:right;font-size:13px;
+    }
+    .sign .line{
+      margin-top:26px;width:240px;
+      border-top:2px solid rgba(15,23,42,.15);
+    }
+
+    /* PRINT */
+    @media print{
+      body{background:white;padding:0}
+      .page{box-shadow:none;border-radius:0}
+    }
+  </style>
+</head>
+<body>
+
+<div class="page">
+
+  <header>
+    <div class="logo">H+</div>
+    <div class="hospital">
+      <h1>Green Valley Hospital</h1>
+      <p>Advanced Care & Digital Health Services</p>
+      <p>📍 Medical City • ☎ (555) 123‑4567</p>
+    </div>
+    <div class="doc-meta">
+      Dr. Sara Ahmed<br>
+      Reg. 987654<br>
+      26 Dec 2025
+    </div>
+  </header>
+
+  <section class="strip">
+    <div class="patient">
+      <div><b>Patient:</b> Ali Khan</div>
+      <div><b>Age / Sex:</b> 45 / M</div>
+      <div><b>MRN:</b> GVH‑000124</div>
+      <div><b>Diagnosis:</b> Hypertension</div>
+    </div>
+    <div class="vitals">
+      <div class="vital"><strong>120/78</strong><span>BP</span></div>
+      <div class="vital"><strong>76</strong><span>HR</span></div>
+      <div class="vital"><strong>98.6°F</strong><span>Temp</span></div>
+      <div class="vital"><strong>18</strong><span>RR</span></div>
+    </div>
+  </section>
+
+  <section class="rx">
+    <div class="rx-grid">
+      <div class="meds">
+        <table>
+          <thead>
+            <tr>
+              <th>Medicine</th>
+              <th>Dosage</th>
+              <th>Duration</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Amlodipine 5 mg</strong></td>
+              <td>1 tab OD</td>
+              <td>30 days</td>
+            </tr>
+            <tr>
+              <td><strong>Losartan 50 mg</strong></td>
+              <td>1 tab OD</td>
+              <td>30 days</td>
+            </tr>
+            <tr>
+              <td><strong>Atorvastatin 20 mg</strong></td>
+              <td>1 tab HS</td>
+              <td>30 days</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="side">
+        <div class="panel">
+          <h4>Instructions</h4>
+          <p>Low salt diet • Daily BP log • Avoid NSAIDs</p>
+        </div>
+        <div class="panel">
+          <h4>Follow‑up</h4>
+          <p>After 4 weeks or earlier if symptoms worsen</p>
+        </div>
+        <div class="panel">
+          <h4>Allergies</h4>
+          <p>None reported</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="note">
+      This is a digitally generated prescription. Valid only with hospital stamp.
+    </div>
+    <div class="sign">
+      Dr. Sara Ahmed<br>
+      <div class="line"></div>
+      Signature
+    </div>
+  </footer>
+
+</div>
+
+</body>
+</html>

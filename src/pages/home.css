@@ -1,0 +1,100 @@
+/* Home page enhancements: 3D hero tilt, animated background orbs, staggered card entry */
+
+.home-hero { perspective: 1000px; }
+
+.home-hero-tilt {
+  display: inline-block;
+  transform-style: preserve-3d;
+  transition: transform 400ms cubic-bezier(.2,.6,.2,1);
+  will-change: transform;
+}
+
+.home-orb {
+  position: absolute;
+  width: 520px;
+  height: 520px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(closest-side, rgba(14,165,233,0.35), rgba(99,102,241,0.28), transparent 70%);
+  filter: blur(60px);
+  opacity: 0.65;
+  animation: orbFloat 16s ease-in-out infinite alternate;
+}
+
+.home-orb.secondary {
+  width: 420px;
+  height: 420px;
+  background: radial-gradient(closest-side, rgba(34,197,94,0.28), rgba(59,130,246,0.25), transparent 70%);
+  animation-duration: 20s;
+}
+
+@keyframes orbFloat {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(12px, -10px, 0) scale(1.03); }
+  100% { transform: translate3d(0, -18px, 0) scale(1.02); }
+}
+
+.home-card-appear { animation: homeCardIn 650ms cubic-bezier(.22,.61,.36,1) both; }
+
+@keyframes homeCardIn {
+  from { opacity: 0; transform: translateY(10px) scale(.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-hero-tilt { transition: none; }
+  .home-orb { animation: none; }
+  .home-card-appear { animation: none; }
+}
+
+/* Make home cards stand out more on the landing page */
+.home-featured-card {
+  background: linear-gradient(#ffffff, #ffffff) padding-box,
+              radial-gradient(120deg, rgba(14,165,233,0.18), rgba(99,102,241,0.18)) border-box;
+  border: 1px solid transparent; /* gradient border via background-clip */
+  box-shadow: 0 12px 30px -10px rgba(15, 23, 42, 0.15);
+}
+.home-featured-card:hover {
+  box-shadow: 0 18px 42px -12px rgba(15, 23, 42, 0.25);
+}
+
+/* Hero text subtle gradient and depth */
+.home-hero-tilt h1 {
+  background: linear-gradient(90deg, #0f2d5c 0%, #3b82f6 50%, #0f2d5c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.2);
+}
+.home-hero-tilt p {
+  animation: heroSubtitleIn 700ms ease-out both;
+}
+@keyframes heroSubtitleIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Background grid and spotlight layers */
+.home-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(15, 23, 42, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15, 23, 42, 0.06) 1px, transparent 1px);
+  background-size: 28px 28px, 28px 28px;
+  mask-image: radial-gradient(ellipse at center, rgba(0,0,0,0.6), transparent 65%);
+}
+
+.home-spotlight {
+  position: absolute;
+  top: -180px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 900px;
+  height: 900px;
+  background: radial-gradient(circle at 50% 40%, rgba(147, 197, 253, 0.35), transparent 60%);
+  filter: blur(40px);
+  pointer-events: none;
+  mix-blend-mode: soft-light;
+}

@@ -1,0 +1,57 @@
+import { z } from 'zod'
+
+export const procedureSessionCreateSchema = z.object({
+  labPatientId: z.string().optional(),
+  patientMrn: z.string().optional(),
+  patientName: z.string().optional(),
+  phone: z.string().optional(),
+  procedureId: z.string().min(1),
+  procedureName: z.string().optional(),
+  date: z.string().min(1),
+  sessionNo: z.number().int().positive().optional(),
+  doctorId: z.string().optional(),
+  price: z.number().nonnegative().optional(),
+  discount: z.number().nonnegative().optional(),
+  paid: z.number().nonnegative().optional(),
+  status: z.enum(['planned','done','cancelled']).optional(),
+  procedureCompleted: z.boolean().optional(),
+  nextVisitDate: z.string().optional(),
+  notes: z.string().optional(),
+  beforeImages: z.array(z.string()).optional(),
+  afterImages: z.array(z.string()).optional(),
+  consentIds: z.array(z.string()).optional(),
+}).refine(d => Boolean(d.labPatientId || d.patientMrn || d.patientName || d.phone), { message: 'At least one patient identifier is required' })
+
+export const procedureSessionUpdateSchema = z.object({
+  labPatientId: z.string().optional(),
+  patientMrn: z.string().optional(),
+  patientName: z.string().optional(),
+  phone: z.string().optional(),
+  procedureId: z.string().optional(),
+  procedureName: z.string().optional(),
+  date: z.string().optional(),
+  sessionNo: z.number().int().positive().optional(),
+  doctorId: z.string().optional(),
+  price: z.number().nonnegative().optional(),
+  discount: z.number().nonnegative().optional(),
+  paid: z.number().nonnegative().optional(),
+  status: z.enum(['planned','done','cancelled']).optional(),
+  procedureCompleted: z.boolean().optional(),
+  nextVisitDate: z.string().optional(),
+  notes: z.string().optional(),
+  beforeImages: z.array(z.string()).optional(),
+  afterImages: z.array(z.string()).optional(),
+  consentIds: z.array(z.string()).optional(),
+})
+
+export const procedureSessionQuerySchema = z.object({
+  search: z.string().optional(),
+  labPatientId: z.string().optional(),
+  patientMrn: z.string().optional(),
+  phone: z.string().optional(),
+  procedureId: z.string().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  page: z.coerce.number().int().positive().optional().default(1),
+  limit: z.coerce.number().int().positive().max(500).optional().default(20),
+})

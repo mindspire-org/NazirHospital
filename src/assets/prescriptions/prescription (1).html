@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Prescription - Hospital Management System (Print-ready)</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    /* =========================
+       Variables & base (modernized)
+       ========================= */
+    :root{
+      --primary:#0066ff; /* vivid blue */
+      --accent:#7b61ff; /* vibrant violet */
+      --teal:#00c2a8;
+      --muted:#687186;
+      --bg:#f4f7fb;
+      --card:#ffffff;
+      --rx-red:#d64545;
+      --glass: rgba(255,255,255,0.72);
+      --paper-width: 210mm; /* A4 width */
+      --paper-height: 297mm; /* A4 height */
+      --elev: 0 10px 28px rgba(12,18,33,0.10);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      font-family: 'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+      background: linear-gradient(180deg,var(--bg), #ffffff);
+      padding:20px;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      color:#0f172a;
+      font-weight:400;
+      letter-spacing:0.1px;
+    }
+
+    /* Center the printable sheet */
+    .sheet-wrap{
+      width: calc(var(--paper-width) - 40px);
+      margin: 10px auto;
+      background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(250,250,255,0.98));
+      padding:18mm; /* safe printing padding */
+      border-radius:14px;
+      box-shadow: var(--elev);
+      position:relative;
+      overflow:hidden;
+    }
+
+    /* modern diagonal accent */
+    .sheet-wrap::after{
+      content:"";position:absolute;right:-120px;top:-120px;width:420px;height:420px;background:radial-gradient(circle at 30% 30%, rgba(123,97,255,0.12), transparent 30%), linear-gradient(135deg,var(--primary),var(--accent));opacity:0.08;transform:rotate(12deg);pointer-events:none;
+    }
+
+    table{border-collapse:collapse;width:100%}
+
+    /* Header */
+    header.pres-header{
+      display:flex;align-items:center;gap:18px;margin-bottom:14px;padding-bottom:6px;border-bottom:1px dashed rgba(12,18,33,0.04);
+    }
+    .logo{
+      width:96px;height:96px;border-radius:18px;display:flex;align-items:center;justify-content:center;
+      background: linear-gradient(135deg,var(--primary),var(--accent));
+      color:white;font-weight:700;font-family:Poppins,Inter;font-size:28px;flex-shrink:0;
+      box-shadow: 0 18px 40px rgba(12,18,33,0.10), 0 4px 10px rgba(12,18,33,0.06);
+      transform: translateZ(20px) rotateX(4deg);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .hospital-info{flex:1;display:flex;flex-direction:column;gap:6px}
+    .hospital-info h1{font-family:Poppins,Inter;font-weight:700;margin:0;font-size:20px;color:rgba(6,8,27,0.95)}
+    .hospital-info p{margin:0;color:var(--muted);font-size:13px}
+    .hospital-meta{display:flex;gap:12px;align-items:center;font-size:12px;color:var(--muted)}
+
+    /* patient & meta row */
+    .meta-row{display:flex;gap:18px;margin:14px 0 18px}
+    .card{background:var(--card);border-radius:12px;padding:14px;box-shadow: 0 8px 22px rgba(12,18,33,0.06);flex:1;border:1px solid rgba(11,17,40,0.03)}
+    .patient-card{min-width:280px}
+    .patient-card h3{margin:0;font-size:14px;font-weight:600;color:#0b1220}
+    .patient-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+    .meta-item{font-size:13px;color:var(--muted)}
+
+    /* Vitals box */
+    .vitals{
+      width:260px;padding:14px;border-radius:14px;background:linear-gradient(180deg, rgba(123,97,255,0.06), rgba(6,102,255,0.02));
+      box-shadow: inset 0 -1px 0 rgba(11,118,255,0.04), 0 12px 28px rgba(11,118,255,0.06);
+      transform: translateZ(10px);border:1px solid rgba(11,17,40,0.03)
+    }
+    .vitals h4{margin:0 0 8px;font-size:14px;font-weight:600;color:#08102a}
+    .vitals-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+    .vital{background:linear-gradient(180deg,var(--glass),#fff);border-radius:10px;padding:10px;font-size:13px;text-align:center;box-shadow: 0 8px 18px rgba(15,23,42,0.05)}
+    .vital .value{font-weight:700;font-size:15px;color:#041028}
+    .vital .label{font-size:12px;color:var(--muted)}
+
+    /* Rx large area */
+    .rx-section{margin-top:12px;background:linear-gradient(180deg, rgba(255,255,255,0.72), rgba(251,253,255,0.98));border-radius:14px;padding:18px;box-shadow: 0 22px 48px rgba(11,118,255,0.06);border:1px solid rgba(11,17,40,0.03)}
+
+    .rx-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+    .rx-title{display:flex;gap:14px;align-items:center}
+    .rx-badge{background:linear-gradient(135deg,var(--rx-red),#ff8a8a);border-radius:12px;padding:10px 14px;font-weight:800;color:white;box-shadow: 0 12px 28px rgba(214,69,69,0.12);transform:translateZ(22px);font-family:Poppins}
+    .rx-meta{font-size:13px;color:var(--muted)}
+
+    .rx-box{
+      min-height:320px;border-radius:12px;padding:14px;background:linear-gradient(180deg,#ffffff,#fbfdff);
+      box-shadow: 0 12px 30px rgba(11,118,255,0.04);position:relative;overflow:hidden;border:1px solid rgba(11,17,40,0.02)
+    }
+    /* subtle 3D accent using pseudo element */
+    .rx-box::before{
+      content:"";position:absolute;right:-30px;top:-100px;width:320px;height:320px;background:radial-gradient(circle at 30% 30%, rgba(108,99,255,0.12), transparent 30%), radial-gradient(circle at 70% 70%, rgba(6,118,255,0.06), transparent 30%);transform:rotate(20deg) translateZ(-20px);opacity:0.9;
+    }
+
+    /* ruled paper lines for prescription handwriting area */
+    .rx-ruled{position:absolute;left:12px;right:12px;top:72px;bottom:12px;border-radius:8px;pointer-events:none;background-image:repeating-linear-gradient(to bottom, rgba(6,8,27,0.02) 0px, rgba(6,8,27,0.02) 1px, transparent 1px, transparent 32px);opacity:0.6}
+
+    /* prescription table */
+    .rx-table thead th{font-size:13px;text-align:left;color:var(--muted);padding:10px 8px;border-bottom:1px dashed rgba(12,18,33,0.06)}
+    .rx-table tbody td{padding:12px 8px;border-bottom:1px solid rgba(12,18,33,0.04);font-size:14px}
+    .dose{font-weight:700;color:#08102a}
+
+    /* Illustration area */
+    .illustration{width:140px;height:140px;display:flex;align-items:center;justify-content:center}
+    /* enhanced 3D pill cluster using CSS */
+    .pill-3d{width:110px;height:56px;border-radius:28px;position:relative;display:inline-block;transform:rotate(-10deg);box-shadow: 0 18px 40px rgba(12,18,33,0.12);}
+    .pill-3d::before,.pill-3d::after{content:"";position:absolute;border-radius:28px}
+    .pill-3d::before{width:56px;height:56px;left:-6px;background:linear-gradient(90deg,#ffdddf,#ff9696);transform:skewX(-10deg);box-shadow: inset -6px -8px 20px rgba(0,0,0,0.06)}
+    .pill-3d::after{width:56px;height:56px;right:-6px;background:linear-gradient(90deg,#fff,#ffecec 60%);transform:skewX(10deg);box-shadow: inset 6px 6px 18px rgba(0,0,0,0.04)}
+
+    /* footer */
+    footer.pres-footer{display:flex;align-items:center;justify-content:space-between;margin-top:18px;font-size:13px;color:var(--muted)}
+    .sig{display:flex;flex-direction:column;align-items:flex-end}
+    .sig .line{width:260px;border-top:1px dashed rgba(12,18,33,0.06);margin-top:18px;padding-top:8px;text-align:center}
+
+    /* small responsive and print rules */
+    @media (max-width:900px){.sheet-wrap{width:100%;padding:12px}}
+
+    /* Print optimizations */
+    @media print{
+      body{background:white;padding:0}\.sheet-wrap{margin:0;border-radius:0;padding:12mm;box-shadow:none;width:auto}
+      a[href]:after{content:""}
+      -webkit-print-color-adjust:exact;print-color-adjust:exact;
+    }
+
+    /* utility */
+    .muted{color:var(--muted);font-size:13px}
+    .flex{display:flex;gap:12px}
+  </style>
+</head>
+<body>
+  <div class="sheet-wrap" role="document" aria-label="Prescription">
+    <header class="pres-header">
+      <div class="logo">H+</div>
+      <div class="hospital-info">
+        <h1>Green Valley Hospital</h1>
+        <p>123 Health Ave, Medical City — Tel: (555) 123-4567 | Reg: GVH-2025</p>
+        <p class="muted">OPD / Department: Internal Medicine &nbsp;•&nbsp; Doctor: Dr. Sara Ahmed (Reg. 987654)</p>
+      </div>
+      <div class="illustration" aria-hidden="true">
+        <div class="pill-3d" title="3D pill illustration"></div>
+      </div>
+    </header>
+
+    <section class="meta-row">
+      <div class="card patient-card">
+        <h3>Patient Information</h3>
+        <div class="patient-grid">
+          <div>
+            <div class="meta-item"><strong>Name:</strong> Ali Khan</div>
+            <div class="meta-item"><strong>Age/Sex:</strong> 45 / M</div>
+            <div class="meta-item"><strong>MRN:</strong> GVH-000124</div>
+          </div>
+          <div>
+            <div class="meta-item"><strong>Visit Date:</strong> 26 Dec 2025</div>
+            <div class="meta-item"><strong>Contact:</strong> +92 300 1234567</div>
+            <div class="meta-item"><strong>Ward/Bed:</strong> OPD</div>
+          </div>
+        </div>
+        <p class="muted" style="margin-top:10px;font-size:12px">Allergies: <strong>None reported</strong></p>
+      </div>
+
+      <div class="vitals" aria-label="Vital signs">
+        <h4>Vital Signs</h4>
+        <div class="vitals-grid">
+          <div class="vital"><div class="value">120/78</div><div class="label">BP</div></div>
+          <div class="vital"><div class="value">76</div><div class="label">HR (bpm)</div></div>
+          <div class="vital"><div class="value">98.6°F</div><div class="label">Temp</div></div>
+          <div class="vital"><div class="value">18</div><div class="label">RR</div></div>
+        </div>
+        <p class="muted" style="margin-top:8px;font-size:12px">Height: 172 cm • Weight: 78 kg • BMI: 26.3</p>
+      </div>
+    </section>
+
+    <section class="rx-section">
+      <div class="rx-header">
+        <div class="rx-title">
+          <div class="rx-badge">Rx</div>
+          <div>
+            <div style="font-weight:700;font-size:15px">Prescription</div>
+            <div class="rx-meta">Diagnosis: Hypertension • Duration: 3 months</div>
+          </div>
+        </div>
+        <div class="rx-meta">Issued: 26 Dec 2025 &nbsp;•&nbsp; Next Visit: 26 Jan 2026</div>
+      </div>
+
+      <div class="rx-box" role="region" aria-label="Prescription Details">
+        <table class="rx-table" aria-hidden="false">
+          <thead>
+            <tr>
+              <th style="width:55%">Medicine</th>
+              <th style="width:20%">Dose / Sig</th>
+              <th style="width:10%">Qty</th>
+              <th style="width:15%">Duration</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Amlodipine 5 mg</strong><div class="muted">(Tab)</div></td>
+              <td class="dose">1 tab OD</td>
+              <td>30</td>
+              <td>30 days</td>
+            </tr>
+            <tr>
+              <td><strong>Losartan 50 mg</strong><div class="muted">(Tab)</div></td>
+              <td class="dose">1 tab OD</td>
+              <td>30</td>
+              <td>30 days</td>
+            </tr>
+            <tr>
+              <td><strong>Atorvastatin 20 mg</strong><div class="muted">(Tab)</div></td>
+              <td class="dose">1 tab HS</td>
+              <td>30</td>
+              <td>30 days</td>
+            </tr>
+            <tr>
+              <td colspan="4" style="padding-top:12px;color:var(--muted);font-size:13px">Notes: Monitor blood pressure weekly. Avoid NSAIDs. Return for follow-up in 4 weeks or earlier if symptomatic.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Decorative small QR / barcode / 3d badge at bottom right -->
+        <div style="position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;align-items:center;gap:6px">
+          <svg width="86" height="86" viewBox="0 0 100 100" aria-hidden="true">
+            <defs>
+              <linearGradient id="g1" x1="0" x2="1">
+                <stop offset="0" stop-color="#6c63ff"/>
+                <stop offset="1" stop-color="#0b76ff"/>
+              </linearGradient>
+            </defs>
+            <rect x="6" y="6" width="88" height="88" rx="10" fill="url(#g1)" opacity="0.12"/>
+            <rect x="18" y="18" width="10" height="10" fill="#0b1220"/>
+            <rect x="36" y="18" width="6" height="6" fill="#0b1220"/>
+            <rect x="48" y="18" width="8" height="8" fill="#0b1220"/>
+            <rect x="18" y="36" width="6" height="6" fill="#0b1220"/>
+            <rect x="30" y="36" width="10" height="10" fill="#0b1220"/>
+            <rect x="48" y="36" width="6" height="6" fill="#0b1220"/>
+            <rect x="18" y="48" width="28" height="6" fill="#0b1220"/>
+          </svg>
+          <div style="font-size:10px;color:var(--muted)">Ref: GVH-PR-2025</div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="pres-footer">
+      <div>
+        <div class="muted">Pharmacy Notes: Dispense generic where possible. Counselling provided.</div>
+        <div style="margin-top:6px;font-size:11px;color:var(--muted)">This is a computer-generated prescription. For emergencies contact the hospital immediately.</div>
+      </div>
+      <div class="sig">
+        <div style="font-weight:700">Dr. Sara Ahmed</div>
+        <div class="muted">MBBS, MD (Medicine)</div>
+        <div class="line">Doctor's Signature</div>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

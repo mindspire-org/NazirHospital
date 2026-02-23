@@ -1,0 +1,15 @@
+import { Request, Response } from 'express'
+import { LabSettings } from '../models/Settings'
+import { settingsUpdateSchema } from '../validators/settings'
+
+export async function get(_req: Request, res: Response) {
+  let s = await LabSettings.findOne().lean()
+  if (!s) s = (await LabSettings.create({})).toObject()
+  res.json(s)
+}
+
+export async function update(req: Request, res: Response) {
+  const data = settingsUpdateSchema.parse(req.body)
+  const s = await LabSettings.findOneAndUpdate({}, { $set: data }, { new: true, upsert: true })
+  res.json(s)
+}

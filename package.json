@@ -1,0 +1,87 @@
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently -n FRONTEND,BACKEND,ELECTRON -c cyan,magenta,green \"npm run dev:front\" \"npm run dev:back\" \"npm run dev:electron\"",
+    "dev:front": "vite --port 8080 --strictPort --host 127.0.0.1",
+    "dev:back": "cross-env MONGO_URI=mongodb://127.0.0.1:27017/hospital_dev npm --prefix backend run dev",
+    "dev:electron": "wait-on http://127.0.0.1:8080 && cross-env ELECTRON_NO_BACKEND=1 VITE_DEV_SERVER_URL=http://127.0.0.1:8080 NODE_ENV=development electron ./electron/main.js",
+    "build": "vite build",
+    "build:front": "vite build",
+    "build:backend": "npm --prefix backend run build",
+    "make:ico": "node ./scripts/make-ico.mjs",
+    "dist:win": "npm run make:ico && npm run build:front && npm run build:backend && electron-builder -w",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.16",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.1.0",
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^9.1.0",
+    "cross-env": "^10.1.0",
+    "electron": "^39.2.4",
+    "electron-builder": "^26.0.12",
+    "jimp": "^0.22.10",
+    "postcss": "^8.5.6",
+    "png-to-ico": "^2.1.8",
+    "tailwindcss": "^4.1.16",
+    "typescript": "~5.9.3",
+    "vite": "^7.1.7",
+    "wait-on": "^9.0.3"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "jspdf": "^3.0.3",
+    "jspdf-autotable": "^5.0.2",
+    "qrcode": "^1.5.4",
+    "lucide-react": "^0.548.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.9.4",
+    "recharts": "^3.6.0",
+    "xlsx": "^0.18.5"
+  },
+  "build": {
+    "appId": "com.hospital.suite",
+    "productName": "Hospital Suite",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "electron/**",
+      "public/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "backend/dist",
+        "to": "server/dist"
+      },
+      {
+        "from": "backend/node_modules",
+        "to": "server/node_modules"
+      },
+      {
+        "from": "backend/.env",
+        "to": "server/.env"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "public/hospital_icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "public/hospital_icon.ico",
+      "uninstallerIcon": "public/hospital_icon.ico"
+    }
+  }
+}
