@@ -8,6 +8,7 @@
     "build": "tsc -p .",
     "start": "node dist/server.js",
     "seed:aesthetic-admin": "ts-node-dev --transpile-only src/seeds/aesthetic_admin.ts",
+    "create:users": "ts-node-dev --transpile-only scripts/create_users.ts",
     "import:lab-tests": "ts-node-dev --transpile-only src/scripts/import_lab_tests.ts",
     "import:diagnostic-tests": "ts-node-dev --transpile-only src/scripts/import_diagnostic_tests.ts"
   },
