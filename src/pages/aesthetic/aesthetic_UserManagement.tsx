@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { aestheticApi } from '../../utils/api'
+import Toast, { type ToastState } from '../../components/ui/Toast'
 
 type User = { _id: string; username: string; role: string }
 
@@ -17,6 +18,7 @@ export default function Aesthetic_UserManagement() {
   const [newRoleName, setNewRoleName] = useState('')
   const [creatingRole, setCreatingRole] = useState(false)
   const [addUserError, setAddUserError] = useState('')
+  const [toast, setToast] = useState<ToastState>(null)
 
   async function load(){
     setLoading(true)
@@ -93,8 +95,9 @@ export default function Aesthetic_UserManagement() {
     try {
       await aestheticApi.deleteUser(_id)
       setUsers(prev => prev.filter(u => u._id !== _id))
+      setToast({ type: 'success', message: 'User deleted' })
     } catch (e: any) {
-      alert(e?.message || 'Failed to delete user')
+      setToast({ type: 'error', message: e?.message || 'Failed to delete user' })
     }
   }
 
@@ -124,7 +127,7 @@ export default function Aesthetic_UserManagement() {
       setNewRoleName('')
       setNewRole(role)
     } catch (e: any) {
-      alert(e?.message || 'Failed to create role')
+      setToast({ type: 'error', message: e?.message || 'Failed to create role' })
     } finally {
       setCreatingRole(false)
     }
@@ -344,6 +347,7 @@ export default function Aesthetic_UserManagement() {
         </div>
       </div>
     )}
+    <Toast toast={toast} onClose={()=>setToast(null)} />
     </>
   )
 }

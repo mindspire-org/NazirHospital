@@ -75,15 +75,15 @@ export default function Pharmacy_ProcessPaymentDialog({ open, onClose, onConfirm
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" role="dialog" aria-modal="true">
-      <form onSubmit={confirm} className="w-full max-w-md overflow-hidden rounded-xl bg-white shadow-2xl ring-1 ring-black/5 dark:bg-slate-900 dark:ring-white/10">
-        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800">
-          <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100">Process Payment</h3>
+      <form onSubmit={confirm} className="w-full max-w-md overflow-hidden rounded-xl bg-white shadow-2xl ring-1 ring-black/5">
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <h3 className="text-lg font-semibold text-slate-800">Process Payment</h3>
           <button type="button" onClick={onClose} className="btn-outline-navy">Cancel</button>
         </div>
         <div className="px-6 py-5 space-y-4">
           <div className="flex gap-2">
-            <button type="button" onClick={()=> setMethod('cash')} className={`flex-1 rounded-md border px-3 py-2 text-center text-sm ${method==='cash' ? 'border-navy bg-navy text-white' : 'border-slate-300 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'}`}>Cash</button>
-            <button type="button" onClick={()=> setMethod('credit')} className={`flex-1 rounded-md border px-3 py-2 text-center text-sm ${method==='credit' ? 'border-navy bg-navy text-white' : 'border-slate-300 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'}`}>Credit</button>
+            <button type="button" onClick={()=> setMethod('cash')} className={`flex-1 rounded-md border px-3 py-2 text-center text-sm ${method==='cash' ? 'border-navy bg-navy text-white' : 'border-slate-300 text-slate-700 hover:bg-slate-50'}`}>Cash</button>
+            <button type="button" onClick={()=> setMethod('credit')} className={`flex-1 rounded-md border px-3 py-2 text-center text-sm ${method==='credit' ? 'border-navy bg-navy text-white' : 'border-slate-300 text-slate-700 hover:bg-slate-50'}`}>Credit</button>
           </div>
 
           <input ref={dummyRef} className="hidden" />
@@ -91,30 +91,30 @@ export default function Pharmacy_ProcessPaymentDialog({ open, onClose, onConfirm
           {showCredit ? (
             <div className="space-y-3">
               <div>
-                <label className="mb-1 block text-sm text-slate-700 dark:text-slate-300">Customer Name</label>
-                <input value={form.name} onChange={e=> setForm({ ...form, name: e.target.value })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
+                <label className="mb-1 block text-sm text-slate-700">Customer Name</label>
+                <input value={form.name} onChange={e=> setForm({ ...form, name: e.target.value })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
               </div>
               <div>
-                <label className="mb-1 block text-sm text-slate-700 dark:text-slate-300">Phone Number</label>
-                <input value={form.phone} onChange={e=> setForm({ ...form, phone: e.target.value })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
+                <label className="mb-1 block text-sm text-slate-700">Phone Number</label>
+                <input value={form.phone} onChange={e=> setForm({ ...form, phone: e.target.value })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
               </div>
               <div>
-                <label className="mb-1 block text-sm text-slate-700 dark:text-slate-300">Address</label>
-                <textarea rows={3} value={form.address} onChange={e=> setForm({ ...form, address: e.target.value })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
+                <label className="mb-1 block text-sm text-slate-700">Address</label>
+                <textarea rows={3} value={form.address} onChange={e=> setForm({ ...form, address: e.target.value })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
               </div>
               <div>
-                <label className="mb-1 block text-sm text-slate-700 dark:text-slate-300">CNIC</label>
-                <input value={form.cnic} onChange={e=> setForm({ ...form, cnic: e.target.value })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
+                <label className="mb-1 block text-sm text-slate-700">CNIC</label>
+                <input value={form.cnic} onChange={e=> setForm({ ...form, cnic: e.target.value })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
               </div>
               <div>
-                <label className="mb-1 block text-sm text-slate-700 dark:text-slate-300">MR #</label>
-                <input value={form.mrNumber} onChange={e=> setForm({ ...form, mrNumber: e.target.value })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
+                <label className="mb-1 block text-sm text-slate-700">MR #</label>
+                <input value={form.mrNumber} onChange={e=> setForm({ ...form, mrNumber: e.target.value })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
               </div>
 
               {suggestions.length > 1 && (
-                <div className="rounded-md border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
+                <div className="rounded-md border border-slate-200 bg-slate-50">
                   {suggestions.slice(0,5).map(c => (
-                    <button type="button" key={c.id} onClick={()=> pick(c)} className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-white dark:text-slate-200 dark:hover:bg-slate-800">
+                    <button type="button" key={c.id} onClick={()=> pick(c)} className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-white">
                       {c.name} {c.phone? `· ${c.phone}`:''} {c.cnic? `· ${c.cnic}`:''} {c.mrNumber? `· ${c.mrNumber}`:''}
                     </button>
                   ))}
@@ -123,12 +123,12 @@ export default function Pharmacy_ProcessPaymentDialog({ open, onClose, onConfirm
             </div>
           ) : (
             <div>
-              <label className="mb-1 block text-sm text-slate-700 dark:text-slate-300">Customer Name (optional)</label>
-              <input value={form.name} onChange={e=> setForm({ ...form, name: e.target.value })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100" />
+              <label className="mb-1 block text-sm text-slate-700">Customer Name (optional)</label>
+              <input value={form.name} onChange={e=> setForm({ ...form, name: e.target.value })} className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
             </div>
           )}
         </div>
-        <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-6 py-4 dark:border-slate-800">
+        <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-6 py-4">
           <button type="button" onClick={onClose} className="btn-outline-navy">Cancel</button>
           <button type="submit" className="btn">Confirm Payment</button>
         </div>

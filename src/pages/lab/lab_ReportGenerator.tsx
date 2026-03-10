@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Search, FileDown, Printer, Pencil } from 'lucide-react'
+import { Search, FileDown, Printer, Pencil, Barcode } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { labApi } from '../../utils/api'
 import { previewLabReportPdf, downloadLabReportPdf } from '../../utils/printLabReport'
 
 type ResultRow = { id: string; test: string; normal?: string; unit?: string; value?: string; comment?: string; flag?: 'normal'|'abnormal'|'critical' }
 
-type ResultRecord = { id: string; orderId: string; rows: ResultRow[]; interpretation?: string; createdAt: string }
+type ResultRecord = { id: string; orderId: string; rows: ResultRow[]; interpretation?: string; createdAt: string; submittedBy?: string; approvedBy?: string }
 
 type Order = {
   id: string
@@ -18,6 +18,7 @@ type Order = {
   sampleTime?: string
   reportingTime?: string
   referringConsultant?: string
+  barcode?: string
 }
 
 type Track = { status: 'received' | 'completed'; sampleTime?: string; reportingTime?: string; tokenNo: string }
@@ -45,6 +46,14 @@ function rowFlag(r: ResultRow) {
 }
 
 function formatDateTime(iso: string) { const d = new Date(iso); return d.toLocaleDateString() + ', ' + d.toLocaleTimeString() }
+
+function genBarcode(order?: Order) {
+  if (!order) return '-'
+  const d = new Date(order.createdAt)
+  const y = d.getFullYear()
+  const part = String(order.tokenNo || order.id || '').replace(/\s+/g, '').replace(/[^a-z0-9_-]/gi, '')
+  return `BC-${y}-${part}`
+}
 
 export default function Lab_ReportGenerator() {
   const navigate = useNavigate()
@@ -89,11 +98,11 @@ export default function Lab_ReportGenerator() {
           labApi.listTests({ limit: 1000 }),
         ])
         if (!mounted || my !== reqSeq.current) return
-        const list = (resRes.items||[]).map((r:any)=>({ id: r._id, orderId: r.orderId, rows: r.rows||[], interpretation: r.interpretation, createdAt: r.createdAt || new Date().toISOString() }))
+        const list = (resRes.items||[]).map((r:any)=>({ id: r._id, orderId: r.orderId, rows: r.rows||[], interpretation: r.interpretation, createdAt: r.createdAt || new Date().toISOString(), submittedBy: r.submittedBy, approvedBy: r.approvedBy }))
         setResults(list)
         setTotal(Number(resRes.total || list.length || 0))
         setTotalPages(Number(resRes.totalPages || 1))
-        const o: Order[] = (ordRes.items||[]).map((x:any)=>({ id: x._id, createdAt: x.createdAt || new Date().toISOString(), patient: x.patient || { fullName: '-', phone: '' }, tests: x.tests||[], status: x.status || 'received', tokenNo: x.tokenNo, sampleTime: x.sampleTime, reportingTime: x.reportingTime, referringConsultant: x.referringConsultant }))
+        const o: Order[] = (ordRes.items||[]).map((x:any)=>({ id: x._id, createdAt: x.createdAt || new Date().toISOString(), patient: x.patient || { fullName: '-', phone: '' }, tests: x.tests||[], status: x.status || 'received', tokenNo: x.tokenNo, sampleTime: x.sampleTime, reportingTime: x.reportingTime, referringConsultant: x.referringConsultant, barcode: x.barcode }))
         setOrders(o)
         setTests((tstRes.items||[]).map((t:any)=>({ id: t._id, name: t.name, category: t.category||'' })))
       } catch (e){ console.error(e); setResults([]); setOrders([]); setTests([]) }
@@ -155,6 +164,7 @@ export default function Lab_ReportGenerator() {
     const o = e.order; if (!o) return
     await previewLabReportPdf({
       tokenNo: e.track?.tokenNo || '-',
+      barcode: o.barcode,
       createdAt: o.createdAt,
       sampleTime: e.track?.sampleTime,
       reportingTime: e.track?.reportingTime,
@@ -174,6 +184,9 @@ export default function Lab_ReportGenerator() {
       })),
       interpretation: e.r.interpretation,
       referringConsultant: o.referringConsultant,
+      submittedBy: e.r.submittedBy,
+      approvedBy: e.r.approvedBy,
+      profileLabel: e.testsStr,
     })
   }
 
@@ -181,6 +194,7 @@ export default function Lab_ReportGenerator() {
     const o = e.order; if (!o) return
     await downloadLabReportPdf({
       tokenNo: e.track?.tokenNo || '-',
+      barcode: o.barcode,
       createdAt: o.createdAt,
       sampleTime: e.track?.sampleTime,
       reportingTime: e.track?.reportingTime,
@@ -200,6 +214,9 @@ export default function Lab_ReportGenerator() {
       })),
       interpretation: e.r.interpretation,
       referringConsultant: o.referringConsultant,
+      submittedBy: e.r.submittedBy,
+      approvedBy: e.r.approvedBy,
+      profileLabel: e.testsStr,
     })
   }
 
@@ -347,11 +364,14 @@ export default function Lab_ReportGenerator() {
               <th className="px-3 py-2">Patient</th>
               <th className="px-3 py-2">MR No</th>
               <th className="px-3 py-2">Token No</th>
+              <th className="px-3 py-2">Barcode</th>
               <th className="px-3 py-2">Sample Time</th>
               <th className="px-3 py-2">Reporting Time</th>
               <th className="px-3 py-2">Test</th>
               <th className="px-3 py-2">Flag</th>
               <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2">Performed By</th>
+              <th className="px-3 py-2">Approved By</th>
               <th className="px-3 py-2">Actions</th>
             </tr>
           </thead>
@@ -363,6 +383,12 @@ export default function Lab_ReportGenerator() {
                 <td className="px-3 py-2 whitespace-nowrap">{e.order?.patient.fullName}</td>
                 <td className="px-3 py-2 whitespace-nowrap">{e.order?.patient.mrn || '-'}</td>
                 <td className="px-3 py-2 whitespace-nowrap">{e.track?.tokenNo || '-'}</td>
+                <td className="px-3 py-2 whitespace-nowrap">
+                  <div className="flex items-center gap-1 text-xs">
+                    <Barcode className="h-4 w-4 text-slate-400" />
+                    <span className="font-mono">{e.order?.barcode || genBarcode(e.order)}</span>
+                  </div>
+                </td>
                 <td className="px-3 py-2 whitespace-nowrap">{e.track?.sampleTime || '-'}</td>
                 <td className="px-3 py-2 whitespace-nowrap">{e.track?.reportingTime || '-'}</td>
                 <td className="px-3 py-2">{e.testsStr || '-'}</td>
@@ -370,6 +396,8 @@ export default function Lab_ReportGenerator() {
                   <span className={`rounded-full px-2 py-0.5 text-xs ${e.flag==='critical'?'bg-rose-100 text-rose-700': e.flag==='abnormal'?'bg-amber-100 text-amber-700': e.flag==='normal'?'bg-emerald-100 text-emerald-700':'bg-slate-100 text-slate-700'}`}>{e.flag}</span>
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap"><span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">approved</span></td>
+                <td className="px-3 py-2 whitespace-nowrap">{e.r.submittedBy || '-'}</td>
+                <td className="px-3 py-2 whitespace-nowrap">{e.r.approvedBy || '-'}</td>
                 <td className="px-3 py-2 whitespace-nowrap">
                   <div className="flex items-center gap-2">
                     <button onClick={()=>downloadRowPdf(e)} className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-slate-700 hover:bg-slate-50"><FileDown className="h-4 w-4" /> PDF</button>

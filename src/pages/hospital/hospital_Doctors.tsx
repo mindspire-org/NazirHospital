@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Hospital_AddDoctorDialog, { type HospitalDoctorInput } from '../../components/hospital/Hospital_AddDoctorDialog'
 import { hospitalApi } from '../../utils/api'
+import Toast, { type ToastState } from '../../components/ui/Toast'
 
 type Doctor = {
   id: string
@@ -33,6 +34,7 @@ export default function Hospital_Doctors() {
   const [limit, setLimit] = useState(10)
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(false)
+  const [toast, setToast] = useState<ToastState>(null)
 
   useEffect(() => {
     loadDepartments()
@@ -92,7 +94,7 @@ export default function Hospital_Doctors() {
       const raw = (e?.message || '').trim()
       let msg = raw
       try { const j = JSON.parse(raw); if (j?.error) msg = j.error } catch {}
-      alert(msg || 'Failed to load doctors')
+      setToast({ type: 'error', message: msg || 'Failed to load doctors' })
       setList([])
       setTotalPages(1)
     } finally {
@@ -132,7 +134,7 @@ export default function Hospital_Doctors() {
       const raw = (e?.message || '').trim()
       let msg = raw
       try { const j = JSON.parse(raw); if (j?.error) msg = j.error } catch {}
-      alert(msg || 'Failed to add doctor')
+      setToast({ type: 'error', message: msg || 'Failed to add doctor' })
     }
   }
 
@@ -320,6 +322,7 @@ export default function Hospital_Doctors() {
           </div>
         </div>
       )}
+      <Toast toast={toast} onClose={()=>setToast(null)} />
     </div>
   )
 }

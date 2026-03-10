@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Eye, CheckCircle2, XCircle, Pencil, Search } from 'lucide-react'
+import { Eye, CheckCircle2, XCircle, Pencil, Search, Barcode } from 'lucide-react'
 import { labApi } from '../../utils/api'
 import { previewLabReportPdf } from '../../utils/printLabReport'
 
 type ResultRow = { id: string; test: string; normal?: string; unit?: string; prevValue?: string; value?: string; flag?: 'normal'|'abnormal'|'critical'; comment?: string }
 
-type ResultRecord = { id: string; orderId: string; rows: ResultRow[]; interpretation?: string; createdAt: string }
+type ResultRecord = { id: string; orderId: string; rows: ResultRow[]; interpretation?: string; createdAt: string; submittedBy?: string; approvedBy?: string; approvedAt?: string }
 
 type Order = {
   id: string
@@ -18,6 +18,7 @@ type Order = {
   sampleTime?: string
   reportingTime?: string
   referringConsultant?: string
+  barcode?: string
 }
 
 type Track = { status: 'received' | 'completed'; sampleTime?: string; reportingTime?: string; tokenNo: string }
@@ -28,6 +29,13 @@ function genToken(dateIso: string, id: string) {
   const d = new Date(dateIso)
   const part = `${d.getDate().toString().padStart(2,'0')}${(d.getMonth()+1).toString().padStart(2,'0')}${d.getFullYear()}`
   return `D${part}_${id.slice(-3)}`
+}
+
+function genBarcode(order: Order) {
+  const d = new Date(order.createdAt)
+  const y = d.getFullYear()
+  const part = String(order.tokenNo || order.id || '').replace(/\s+/g, '').replace(/[^a-z0-9_-]/gi, '')
+  return `BC-${y}-${part}`
 }
 
 export default function Lab_ReportApproval() {
@@ -71,6 +79,7 @@ export default function Lab_ReportApproval() {
               sampleTime: found.sampleTime,
               reportingTime: found.reportingTime,
               referringConsultant: found.referringConsultant,
+              barcode: found.barcode,
             }
           : null
         setOrder(o)
@@ -93,6 +102,9 @@ export default function Lab_ReportApproval() {
                 })),
                 interpretation: rec.interpretation,
                 createdAt: String(rec.createdAt || new Date().toISOString()),
+                submittedBy: rec.submittedBy,
+                approvedBy: rec.approvedBy,
+                approvedAt: rec.approvedAt,
               }
             : null
         )
@@ -136,6 +148,7 @@ export default function Lab_ReportApproval() {
           sampleTime: x.sampleTime,
           reportingTime: x.reportingTime,
           referringConsultant: x.referringConsultant,
+          barcode: x.barcode,
         }))
         const results: any[] = (resRes.items || [])
         const resultByOrderId = new Map<string, any>()
@@ -197,6 +210,7 @@ export default function Lab_ReportApproval() {
     if (!order || !result) return
     await previewLabReportPdf({
       tokenNo,
+      barcode: order.barcode,
       createdAt: order.createdAt,
       sampleTime: track?.sampleTime,
       reportingTime: track?.reportingTime,
@@ -236,8 +250,10 @@ export default function Lab_ReportApproval() {
                 <th className="px-3 py-2">Patient</th>
                 <th className="px-3 py-2">MR No</th>
                 <th className="px-3 py-2">Token</th>
+                <th className="px-3 py-2">Barcode</th>
                 <th className="px-3 py-2">Test(s)</th>
                 <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">Submitted By</th>
                 <th className="px-3 py-2">Actions</th>
               </tr>
             </thead>
@@ -252,10 +268,17 @@ export default function Lab_ReportApproval() {
                     <td className="px-3 py-2 whitespace-nowrap">{order.patient.fullName}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{order.patient.mrn || '-'}</td>
                     <td className="px-3 py-2 whitespace-nowrap font-mono">{token}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <div className="flex items-center gap-1 text-xs">
+                        <Barcode className="h-4 w-4 text-slate-400" />
+                        <span className="font-mono">{order.barcode || genBarcode(order)}</span>
+                      </div>
+                    </td>
                     <td className="px-3 py-2">{testsStr || '-'}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       <span className={`rounded-full px-2 py-0.5 text-xs ${st === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{st}</span>
                     </td>
+                    <td className="px-3 py-2 whitespace-nowrap">{String((result as any)?.submittedBy || '-')}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       <button onClick={() => navigate(`/lab/report-approval?orderId=${encodeURIComponent(order.id)}`)} className="rounded-md border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">Open</button>
                     </td>
@@ -374,10 +397,7 @@ export default function Lab_ReportApproval() {
                 onClick={async () => {
                   if (!result) return
                   try {
-                    const raw = localStorage.getItem('lab.session')
-                    const session = raw ? JSON.parse(raw) : null
-                    const approvedBy = String(session?.username || session?.user?.username || session?.name || '')
-                    await labApi.updateResult(result.id, { reportStatus: 'approved', approvedAt: new Date().toISOString(), approvedBy: approvedBy || undefined })
+                    await labApi.updateResult(result.id, { reportStatus: 'approved', approvedAt: new Date().toISOString() })
                     navigate('/lab/report-approval')
                   } catch (e) {
                     console.error(e)

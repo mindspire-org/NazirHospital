@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { corporateApi } from '../../../utils/api'
+import Toast, { type ToastState } from '../../../components/ui/Toast'
+import ConfirmDialog from '../../../components/ui/ConfirmDialog'
 
 export default function Hospital_CorporateCompanies(){
   const [loading, setLoading] = useState(true)
@@ -11,6 +13,8 @@ export default function Hospital_CorporateCompanies(){
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(20)
   const [total, setTotal] = useState<number | null>(null)
+  const [toast, setToast] = useState<ToastState>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string>('')
 
   async function load(){
     setLoading(true)
@@ -31,14 +35,15 @@ export default function Hospital_CorporateCompanies(){
   }, [showAdd])
 
   async function create(){
-    if (!form.name.trim()) { alert('Name is required'); return }
+    if (!form.name.trim()) { setToast({ type: 'error', message: 'Name is required' }); return }
     try {
       setCreating(true)
       await corporateApi.createCompany({ ...form, active: !!form.active })
       setForm({ name: '', code: '', contactName: '', phone: '', email: '', address: '', terms: '', billingCycle: '', active: true })
       setShowAdd(false)
       await load()
-    } catch (e: any){ alert(e?.message || 'Failed to create company') }
+      setToast({ type: 'success', message: 'Company created' })
+    } catch (e: any){ setToast({ type: 'error', message: e?.message || 'Failed to create company' }) }
     finally { setCreating(false) }
   }
 
@@ -57,15 +62,29 @@ export default function Hospital_CorporateCompanies(){
       })
       setEditingId(null)
       await load()
-    } catch (e: any){ alert(e?.message || 'Failed to update') }
+      setToast({ type: 'success', message: 'Updated' })
+    } catch (e: any){ setToast({ type: 'error', message: e?.message || 'Failed to update' }) }
   }
 
   async function remove(id: string){
-    if (!confirm('Delete this company?')) return
-    try { await corporateApi.deleteCompany(id); await load() } catch (e: any){ alert(e?.message || 'Failed to delete') }
+    setConfirmDeleteId(String(id))
+  }
+
+  async function confirmDelete(){
+    const id = confirmDeleteId
+    setConfirmDeleteId('')
+    if (!id) return
+    try {
+      await corporateApi.deleteCompany(id)
+      await load()
+      setToast({ type: 'success', message: 'Deleted' })
+    } catch (e: any){
+      setToast({ type: 'error', message: e?.message || 'Failed to delete' })
+    }
   }
 
   return (
+    <>
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold text-slate-800">Corporate Companies</h2>
@@ -181,6 +200,16 @@ export default function Hospital_CorporateCompanies(){
         </div>
       </section>
     </div>
+    <ConfirmDialog
+      open={!!confirmDeleteId}
+      title="Confirm"
+      message="Delete this company?"
+      confirmText="Delete"
+      onCancel={()=>setConfirmDeleteId('')}
+      onConfirm={confirmDelete}
+    />
+    <Toast toast={toast} onClose={()=>setToast(null)} />
+    </>
   )
 }
 

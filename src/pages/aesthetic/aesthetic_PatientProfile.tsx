@@ -1,27 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import { aestheticApi, labApi } from '../../utils/api'
 import SignaturePad from '../../components/common/SignaturePad'
 import { ArrowLeft, CalendarClock, CheckCircle2, CircleDollarSign, Clock, FileText, Image, Plus, Receipt, ShieldCheck } from 'lucide-react'
+import Toast, { type ToastState } from '../../components/ui/Toast'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 export default function Aesthetic_PatientProfile(){
   const { mrn = '' } = useParams()
-  const [historyTab, setHistoryTab] = useState<'ongoing'|'past'>('ongoing')
-  const [patient, setPatient] = useState<any|null>(null)
+  const [patient, setPatient] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [catalog, setCatalog] = useState<any[]>([])
+  const [historyTab, setHistoryTab] = useState<'ongoing'|'past'>('ongoing')
   const [sessions, setSessions] = useState<any[]>([])
   const [consents, setConsents] = useState<any[]>([])
 
   const normStatus = (st: any) => String(st || 'planned').trim().toLowerCase()
-  const isClosedStatus = (st: any) => {
-    const v = normStatus(st)
-    return v === 'done' || v === 'completed' || v === 'cancelled'
-  }
 
   const [addSessionOpen, setAddSessionOpen] = useState(false)
-  const [catalog, setCatalog] = useState<any[]>([])
   const [templates, setTemplates] = useState<any[]>([])
-
   const [sessionForm, setSessionForm] = useState({ procedureId: '', date: new Date().toISOString().slice(0,16), price: '', discount: '0', paid: '0', notes: '' })
   const [consentOpen, setConsentOpen] = useState(false)
   const [consentForm, setConsentForm] = useState<{ templateId: string; signature?: string }>({ templateId: '' })
@@ -38,6 +35,8 @@ export default function Aesthetic_PatientProfile(){
 
   const [completeProcedureId, setCompleteProcedureId] = useState('')
   const [completeBusy, setCompleteBusy] = useState(false)
+  const [toast, setToast] = useState<ToastState>(null)
+  const [confirmComplete, setConfirmComplete] = useState<{ open: boolean; procedureId: string; procedureName?: string } | null>(null)
 
   useEffect(()=>{
     let cancelled = false
@@ -176,31 +175,36 @@ export default function Aesthetic_PatientProfile(){
   const completeProcedure = async (procedureId: string)=>{
     const pid = String(procedureId || '')
     if (!pid) {
-      window.alert('Select a procedure first.')
+      setToast({ type: 'error', message: 'Select a procedure first.' })
       return
     }
     if (completeBusy) return
     if (procedureCompletedById.get(pid) === true){
-      window.alert('Procedure already completed.')
+      setToast({ type: 'info', message: 'Procedure already completed.' })
       return
     }
     const procName = procedureOptions.find(x=>String(x.id)===pid)?.name || pid
-    const ok = window.confirm(`Complete procedure: ${procName}?`)
-    if (!ok) return
+    setConfirmComplete({ open: true, procedureId: pid, procedureName: procName })
+  }
 
+  const confirmCompleteProcedure = async ()=>{
+    const pid = String(confirmComplete?.procedureId || '')
+    const name = String(confirmComplete?.procedureName || '')
+    setConfirmComplete(null)
+    if (!pid) return
     try {
       setCompleteBusy(true)
       const outstanding = outstandingByProcedureId.get(pid) || 0
       if (outstanding > 0){
-        window.alert(`Cannot complete procedure. Outstanding balance: Rs ${Math.round(outstanding).toLocaleString()}`)
+        setToast({ type: 'error', message: `Cannot complete procedure. Outstanding balance: Rs ${Math.round(outstanding).toLocaleString()}` })
         return
       }
       await aestheticApi.completeProcedure({ patientMrn: String(mrn), procedureId: pid })
       await refreshSessions()
       setHistoryTab('past')
-      window.alert('Procedure completed.')
+      setToast({ type: 'success', message: name ? `Completed: ${name}` : 'Procedure completed.' })
     } catch {
-      window.alert('Unable to complete procedure. Please try again.')
+      setToast({ type: 'error', message: 'Unable to complete procedure. Please try again.' })
     } finally {
       setCompleteBusy(false)
     }
@@ -285,6 +289,7 @@ export default function Aesthetic_PatientProfile(){
   if (!patient) return <div className="p-4 text-slate-600">No patient found for MRN: {mrn}</div>
 
   return (
+    <>
     <div className="max-w-7xl mx-auto space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
@@ -857,17 +862,17 @@ export default function Aesthetic_PatientProfile(){
                   const amount = Number(payForm.amount||0)
                   const payable = Number(paySession?.balance || 0)
                   if (amount <= 0){
-                    window.alert('Enter a valid amount.')
+                    setToast({ type: 'error', message: 'Enter a valid amount.' })
                     return
                   }
                   if (payable > 0 && amount > payable){
-                    window.alert(`Payable is Rs ${Math.round(payable).toLocaleString()}. You cannot pay more than payable.`)
+                    setToast({ type: 'error', message: `Payable is Rs ${Math.round(payable).toLocaleString()}. You cannot pay more than payable.` })
                     return
                   }
                   try {
                     await aestheticApi.addProcedureSessionPayment(String(paySession._id), { amount, method: payForm.method, note: payForm.note })
                   } catch {
-                    window.alert('Payment failed. Please try again.')
+                    setToast({ type: 'error', message: 'Payment failed. Please try again.' })
                     return
                   }
                   setPayOpen(false)
@@ -911,6 +916,16 @@ export default function Aesthetic_PatientProfile(){
         </div>
       )}
     </div>
+    <ConfirmDialog
+      open={!!confirmComplete?.open}
+      title="Confirm"
+      message={confirmComplete?.procedureName ? `Complete procedure: ${confirmComplete.procedureName}?` : 'Complete this procedure?'}
+      confirmText="Complete"
+      onCancel={()=>setConfirmComplete(null)}
+      onConfirm={confirmCompleteProcedure}
+    />
+    <Toast toast={toast} onClose={()=>setToast(null)} />
+    </>
   )
 }
 

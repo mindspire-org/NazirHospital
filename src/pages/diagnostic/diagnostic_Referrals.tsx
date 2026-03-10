@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { hospitalApi } from '../../utils/api'
+import Toast from '../../components/ui/Toast'
 
 export default function Diagnostic_Referrals(){
   const navigate = useNavigate()
@@ -12,6 +13,9 @@ export default function Diagnostic_Referrals(){
   const [total, setTotal] = useState(0)
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+
+  // Toast notifications
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null)
 
   useEffect(()=>{ load() }, [status, page, limit, from, to])
 
@@ -32,11 +36,12 @@ export default function Diagnostic_Referrals(){
       } else {
         await load()
       }
-    }catch(e: any){ alert(e?.message || 'Failed') }
+      setToast({ type: 'success', message: `Referral marked as ${st}` })
+    }catch(e: any){ setToast({ type: 'error', message: e?.message || 'Failed to update referral' }) }
   }
   async function remove(id: string){
     if(!confirm('Delete this referral?')) return
-    try{ await hospitalApi.deleteReferral(id); await load() }catch(e: any){ alert(e?.message || 'Failed') }
+    try{ await hospitalApi.deleteReferral(id); await load(); setToast({ type: 'success', message: 'Referral deleted successfully' }) }catch(e: any){ setToast({ type: 'error', message: e?.message || 'Failed to delete referral' }) }
   }
 
   const filtered = useMemo(()=>{
@@ -45,7 +50,7 @@ export default function Diagnostic_Referrals(){
   }, [list, q])
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="text-xl font-semibold text-slate-800">Diagnostic Referrals</div>
         <div className="flex items-center gap-2">
@@ -114,6 +119,7 @@ export default function Diagnostic_Referrals(){
           ))}
           {filtered.length===0 && <div className="px-4 py-8 text-center text-slate-500 text-sm">No referrals</div>}
         </div>
+        <Toast toast={toast} onClose={() => setToast(null)} />
         <div className="flex items-center justify-between px-4 py-3 text-sm">
           <button className="rounded-md border border-slate-300 px-3 py-1 disabled:opacity-50" disabled={page<=1} onClick={()=>setPage(p=>Math.max(1,p-1))}>Prev</button>
           <div className="text-slate-600">Page {page}</div>

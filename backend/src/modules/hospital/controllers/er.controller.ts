@@ -1,7 +1,7 @@
 import { Request, Response } from 'express'
 import { HospitalEncounter } from '../models/Encounter'
 import { HospitalErCharge } from '../models/ErCharge'
-import { createErChargeSchema } from '../validators/er'
+import { createErChargeSchema, updateErChargeSchema } from '../validators/er'
 
 async function getEREncounter(encounterId: string){
   const enc = await HospitalEncounter.findById(encounterId)
@@ -44,5 +44,27 @@ export async function removeCharge(req: Request, res: Response){
     const row = await HospitalErCharge.findByIdAndDelete(String(id))
     if (!row) return res.status(404).json({ error: 'Charge not found' })
     res.json({ ok: true })
+  }catch(e){ return handleError(res, e) }
+}
+
+export async function updateCharge(req: Request, res: Response){
+  try{
+    const { id } = req.params as any
+    const data = updateErChargeSchema.parse(req.body)
+    const set: any = { ...data }
+    if (set.description != null) set.description = String(set.description).trim()
+
+    // If qty/unitPrice changed but amount not explicitly provided, recompute
+    if (set.amount == null && (set.qty != null || set.unitPrice != null)){
+      const existing: any = await HospitalErCharge.findById(String(id)).lean()
+      if (!existing) return res.status(404).json({ error: 'Charge not found' })
+      const qty = set.qty != null ? Number(set.qty || 0) : Number(existing.qty || 0)
+      const unitPrice = set.unitPrice != null ? Number(set.unitPrice || 0) : Number(existing.unitPrice || 0)
+      set.amount = qty * unitPrice
+    }
+
+    const row = await HospitalErCharge.findByIdAndUpdate(String(id), { $set: set }, { new: true })
+    if (!row) return res.status(404).json({ error: 'Charge not found' })
+    res.json({ charge: row })
   }catch(e){ return handleError(res, e) }
 }

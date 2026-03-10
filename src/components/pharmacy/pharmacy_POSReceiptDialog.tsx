@@ -84,9 +84,9 @@ export default function Pharmacy_POSReceiptDialog({ open, onClose, receiptNo, me
         }
       `}</style>
       <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 px-4 py-6 print:static print:p-0 print:bg-white" role="dialog" aria-modal="true">
-        <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl ring-1 ring-black/5 dark:bg-slate-900 dark:ring-white/10 print:shadow-none print:ring-0 print:rounded-none print:max-w-none print:bg-white">
-          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 print:hidden no-print dark:border-slate-800">
-          <div className="font-medium text-slate-900 dark:text-slate-100">Receipt {receiptNo}</div>
+        <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl ring-1 ring-black/5 print:shadow-none print:ring-0 print:rounded-none print:max-w-none print:bg-white">
+          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 print:hidden no-print">
+          <div className="font-medium text-slate-900">Receipt {receiptNo}</div>
           <div className="flex items-center gap-2">
             <button onClick={() => window.print()} className="btn-outline-navy">Print (Ctrl+P)</button>
             <button onClick={onClose} className="btn-outline-navy">Close (Ctrl+D)</button>

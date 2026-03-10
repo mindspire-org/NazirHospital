@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { hospitalApi } from '../../utils/api'
+import Toast, { type ToastState } from '../ui/Toast'
 
 type VisitRow = {
   _id: string
@@ -14,6 +15,7 @@ type VisitRow = {
 export default function DailyProgressSheet({ encounterId }: { encounterId: string }){
   const [rows, setRows] = useState<VisitRow[]>([])
   const [open, setOpen] = useState(false)
+  const [toast, setToast] = useState<ToastState>(null)
 
   useEffect(()=>{ if(encounterId){ reload() } }, [encounterId])
 
@@ -44,7 +46,7 @@ export default function DailyProgressSheet({ encounterId }: { encounterId: strin
   async function handleCreate(d: { doctorId?: string; date?: string; time?: string; subjective?: string; objective?: string; assessment?: string; plan?: string }){
     try{
       const hasAny = [d.subjective, d.objective, d.assessment, d.plan].some(x => (x||'').trim().length>0)
-      if (!hasAny){ alert('Please enter at least one of Subjective, Objective, Assessment, or Plan'); return }
+      if (!hasAny){ setToast({ type: 'error', message: 'Please enter at least one of Subjective, Objective, Assessment, or Plan' }); return }
       const when = d.date && d.time ? `${d.date}T${d.time}` : undefined
       await hospitalApi.createIpdDoctorVisit(encounterId, {
         doctorId: d.doctorId,
@@ -55,7 +57,8 @@ export default function DailyProgressSheet({ encounterId }: { encounterId: strin
         plan: d.plan,
       })
       await reload(); setOpen(false)
-    }catch(e: any){ alert(e?.message || 'Failed to create progress entry') }
+      setToast({ type: 'success', message: 'Progress entry saved' })
+    }catch(e: any){ setToast({ type: 'error', message: e?.message || 'Failed to create progress entry' }) }
   }
 
   return (
@@ -104,6 +107,7 @@ export default function DailyProgressSheet({ encounterId }: { encounterId: strin
       )}
 
       <DailyProgressDialog open={open} onClose={()=>setOpen(false)} onSave={handleCreate} />
+      <Toast toast={toast} onClose={()=>setToast(null)} />
     </div>
   )
 }

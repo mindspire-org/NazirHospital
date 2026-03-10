@@ -15,6 +15,13 @@ body {
   color: #0f172a;
 }
 
+/* Hospital: make sidebar/menu typography crisp and more like modern admin templates */
+.hospital-scope {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 /* Utility-like custom classes without @apply to avoid IDE warnings */
 .card {
   border-radius: 1rem; /* ~rounded-2xl */

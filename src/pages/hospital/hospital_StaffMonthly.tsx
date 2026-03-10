@@ -39,10 +39,12 @@ export default function Hospital_StaffMonthly(){
       try {
         const from = `${month}-01`
         const to = new Date(Number(month.slice(0,4)), Number(month.slice(5,7)), 0)
-        const toStr = `${to.getFullYear()}-${String(to.getMonth()+1).padStart(2,'0')}-${String(to.getDate()).padStart(2,'0')}`
+        const toStr = `${to.getFullYear()}-${String(month.slice(5,7)).padStart(2,'0')}-${String(to.getDate()).padStart(2,'0')}`
         const res = await hospitalApi.listAttendance({ from, to: toStr, staffId: selectedStaffId || undefined, limit: 1000 })
+        console.log('DEBUG StaffMonthly API:', { from, to: toStr, staffId: selectedStaffId, items: res?.items?.length, firstItem: res?.items?.[0] })
         if (!mounted) return
-        setAtt((res.items||[]).map((x:any)=>({ id: x._id || `${x.staffId}-${x.date}-${x.shiftId||''}`, staffId: x.staffId, date: x.date, shiftId: x.shiftId, status: x.status, clockIn: x.clockIn, clockOut: x.clockOut, notes: x.notes })))
+        const mapped = (res.items||[]).map((x:any)=>({ id: x._id || `${x.staffId}-${x.date}-${x.shiftId||''}`, staffId: String(x.staffId), date: x.date, shiftId: x.shiftId, status: x.status, clockIn: x.clockIn, clockOut: x.clockOut, notes: x.notes }))
+        setAtt(mapped)
       } catch (e) { console.error(e) }
     })()
     return ()=>{ mounted = false }
@@ -50,8 +52,10 @@ export default function Hospital_StaffMonthly(){
 
   const days = useMemo(()=>{
     if (!selectedStaffId) return [] as Array<{ date:string; clockIn?:string; clockOut?:string; status:string }>
+    console.log('DEBUG days useMemo - att length:', att.length, 'selectedStaffId:', selectedStaffId)
+    console.log('DEBUG att records:', att.slice(0,5))
     const byDate: Record<string, { clockIn?:string; clockOut?:string; status:string }> = {}
-    for (const a of att.filter(x=>x.staffId===selectedStaffId)){
+    for (const a of att.filter(x=> String(x.staffId) === String(selectedStaffId))){
       const d = a.date
       if (!byDate[d]) byDate[d] = { status: a.status, clockIn: a.clockIn, clockOut: a.clockOut }
       else {
@@ -69,11 +73,10 @@ export default function Hospital_StaffMonthly(){
       for (let d=1; d<=totalDays; d++){
         const date = `${month}-${String(d).padStart(2,'0')}`
         const rec = byDate[date]
-        list.push({ date, clockIn: rec?.clockIn, clockOut: rec?.clockOut, status: rec?.status || (rec?.clockIn||rec?.clockOut ? 'present' : 'absent') })
+        list.push({ date, clockIn: rec?.clockIn, clockOut: rec?.clockOut, status: rec?.status || (rec ? 'present' : 'absent') })
       }
     } else {
       list = Object.entries(byDate)
-        .filter(([,v])=> Boolean(v.clockIn) || Boolean(v.clockOut))
         .map(([date,v])=> ({ date, clockIn: v.clockIn, clockOut: v.clockOut, status: v.status || 'present' }))
     }
     list.sort((a,b)=> (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
@@ -84,7 +87,7 @@ export default function Hospital_StaffMonthly(){
 
   const saveQuick = async (date: string, type:'in'|'out') => {
     if (!selectedStaffId) return
-    const dayRecs = att.filter(x=> x.staffId===selectedStaffId && x.date===date)
+    const dayRecs = att.filter(x=> String(x.staffId)===String(selectedStaffId) && x.date===date)
     const alreadyIn = dayRecs.some(r=> !!r.clockIn)
     const alreadyOut = dayRecs.some(r=> !!r.clockOut)
     if ((type==='in' && alreadyIn) || (type==='out' && alreadyOut)) return
@@ -93,9 +96,9 @@ export default function Hospital_StaffMonthly(){
     await hospitalApi.upsertAttendance(payload)
     // refresh
     const to = new Date(Number(month.slice(0,4)), Number(month.slice(5,7)), 0)
-    const toStr = `${to.getFullYear()}-${String(to.getMonth()+1).padStart(2,'0')}-${String(to.getDate()).padStart(2,'0')}`
+    const toStr = `${to.getFullYear()}-${String(month.slice(5,7)).padStart(2,'0')}-${String(to.getDate()).padStart(2,'0')}`
     const res = await hospitalApi.listAttendance({ from: `${month}-01`, to: toStr, staffId: selectedStaffId })
-    setAtt((res.items||[]).map((x:any)=>({ id: x._id || `${x.staffId}-${x.date}-${x.shiftId||''}`, staffId: x.staffId, date: x.date, shiftId: x.shiftId, status: x.status, clockIn: x.clockIn, clockOut: x.clockOut, notes: x.notes })))
+    setAtt((res.items||[]).map((x:any)=>({ id: x._id || `${x.staffId}-${x.date}-${x.shiftId||''}`, staffId: String(x.staffId), date: x.date, shiftId: x.shiftId, status: x.status, clockIn: x.clockIn, clockOut: x.clockOut, notes: x.notes })))
   }
 
   const exportCsv = () => {

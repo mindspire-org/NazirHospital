@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { hospitalApi } from '../../utils/api'
+import Toast, { type ToastState } from '../../components/ui/Toast'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 export default function Lab_Referrals(){
   const navigate = useNavigate()
@@ -12,6 +14,8 @@ export default function Lab_Referrals(){
   const [total, setTotal] = useState(0)
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+  const [toast, setToast] = useState<ToastState>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string>('')
 
   useEffect(()=>{ load() }, [status, page, limit, from, to])
 
@@ -33,11 +37,18 @@ export default function Lab_Referrals(){
       } else {
         await load()
       }
-    }catch(e: any){ alert(e?.message || 'Failed') }
+    }catch(e: any){ setToast({ type: 'error', message: e?.message || 'Failed' }) }
   }
   async function remove(id: string){
-    if(!confirm('Delete this referral?')) return
-    try{ await hospitalApi.deleteReferral(id); await load() }catch(e: any){ alert(e?.message || 'Failed') }
+    setConfirmDeleteId(String(id))
+  }
+
+  async function confirmDelete(){
+    const id = confirmDeleteId
+    setConfirmDeleteId('')
+    if (!id) return
+    try{ await hospitalApi.deleteReferral(id); await load(); setToast({ type: 'success', message: 'Deleted' }) }
+    catch(e: any){ setToast({ type: 'error', message: e?.message || 'Failed' }) }
   }
 
   const filtered = useMemo(()=>{
@@ -46,6 +57,7 @@ export default function Lab_Referrals(){
   }, [list, q])
 
   return (
+    <>
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="text-xl font-semibold text-slate-800">Lab Referrals</div>
@@ -120,5 +132,15 @@ export default function Lab_Referrals(){
         </div>
       </div>
     </div>
+    <ConfirmDialog
+      open={!!confirmDeleteId}
+      title="Confirm"
+      message="Delete this referral?"
+      confirmText="Delete"
+      onCancel={()=>setConfirmDeleteId('')}
+      onConfirm={confirmDelete}
+    />
+    <Toast toast={toast} onClose={()=>setToast(null)} />
+    </>
   )
 }

@@ -27,11 +27,15 @@ import * as IpdDocs from '../controllers/ipd_docs.controller'
 import * as DocSchedules from '../controllers/doctor_schedule.controller'
 import * as Appointments from '../controllers/appointments.controller'
 import * as Equipment from '../controllers/equipment.controller'
-import * as Store from '../controllers/store.controller'
 import * as SidebarPerms from '../controllers/sidebarPermission.controller'
 import * as FBR from '../controllers/fbr.controller'
 import * as ER from '../controllers/er.controller'
+import * as ERBilling from '../controllers/er_billing.controller'
+import * as ERServices from '../controllers/er_services.controller'
+import * as ERRec from '../controllers/er_records.controller'
 import { auth } from '../../../common/middleware/auth'
+import * as PharmacyCashCounts from '../../pharmacy/controllers/cash_count.controller'
+import * as Reports from '../controllers/reports.controller'
 
 const r = Router()
 
@@ -143,7 +147,7 @@ r.put('/ipd/billing/items/:id', IPDRec.updateBillingItem)
 r.delete('/ipd/billing/items/:id', IPDRec.removeBillingItem)
 
 // IPD Records - Payments
-r.post('/ipd/admissions/:encounterId/billing/payments', IPDRec.createPayment)
+r.post('/ipd/admissions/:encounterId/billing/payments', auth, IPDRec.createPayment)
 r.get('/ipd/admissions/:encounterId/billing/payments', IPDRec.listPayments)
 r.put('/ipd/billing/payments/:id', IPDRec.updatePayment)
 r.delete('/ipd/billing/payments/:id', IPDRec.removePayment)
@@ -151,7 +155,37 @@ r.delete('/ipd/billing/payments/:id', IPDRec.removePayment)
 // ER Charges
 r.get('/er/encounters/:encounterId/charges', ER.listCharges)
 r.post('/er/encounters/:encounterId/charges', ER.createCharge)
+r.put('/er/charges/:id', ER.updateCharge)
 r.delete('/er/charges/:id', ER.removeCharge)
+
+// ER Billing - Payments
+r.get('/er/encounters/:encounterId/billing/summary', ERBilling.getSummary)
+r.get('/er/encounters/:encounterId/billing/payments', ERBilling.listPayments)
+r.post('/er/encounters/:encounterId/billing/payments', auth, ERBilling.createPayment)
+
+// ER Services Catalog
+r.get('/er/services', ERServices.list)
+r.post('/er/services', ERServices.create)
+r.put('/er/services/:id', ERServices.update)
+r.delete('/er/services/:id', ERServices.remove)
+
+// ER Records - Vitals
+r.post('/er/encounters/:encounterId/vitals', ERRec.createVital)
+r.get('/er/encounters/:encounterId/vitals', ERRec.listVitals)
+r.put('/er/vitals/:id', ERRec.updateVital)
+r.delete('/er/vitals/:id', ERRec.removeVital)
+
+// ER Records - Medication Orders
+r.post('/er/encounters/:encounterId/med-orders', ERRec.createMedicationOrder)
+r.get('/er/encounters/:encounterId/med-orders', ERRec.listMedicationOrders)
+r.put('/er/med-orders/:id', ERRec.updateMedicationOrder)
+r.delete('/er/med-orders/:id', ERRec.removeMedicationOrder)
+
+// ER Records - Clinical Notes
+r.post('/er/encounters/:encounterId/clinical-notes', ERRec.createClinicalNote)
+r.get('/er/encounters/:encounterId/clinical-notes', ERRec.listClinicalNotes)
+r.put('/er/clinical-notes/:id', ERRec.updateClinicalNote)
+r.delete('/er/clinical-notes/:id', ERRec.removeClinicalNote)
 
 // IPD Discharge Documents
 r.get('/ipd/admissions/:id/discharge-summary', IpdDocs.getDischargeSummary)
@@ -205,7 +239,7 @@ r.get('/ipd/admissions/:id/final-invoice', IpdDocs.getFinalInvoice)
 r.get('/ipd/admissions/:id/final-invoice/print', IpdDocs.printFinalInvoice)
 
 // Tokens (OPD)
-r.post('/tokens/opd', Tokens.createOpd)
+r.post('/tokens/opd', auth, Tokens.createOpd)
 r.get('/tokens', Tokens.list)
 r.get('/tokens/:id', Tokens.getById)
 r.patch('/tokens/:id/status', Tokens.updateStatus)
@@ -265,17 +299,20 @@ r.delete('/staff-earnings/:id', StaffEarnings.remove)
 
 // Expenses
 r.get('/expenses', Expense.list)
-r.post('/expenses', Expense.create)
+r.post('/expenses', auth, Expense.create)
+r.put('/expenses/:id', Expense.update)
 r.delete('/expenses/:id', Expense.remove)
 
 // Finance (Hospital-owned) Doctor finance
 r.post('/finance/manual-doctor-earning', FinanceCtl.postManualDoctorEarning)
-r.post('/finance/doctor-payout', FinanceCtl.postDoctorPayout)
+r.post('/finance/doctor-payout', auth, FinanceCtl.postDoctorPayout)
 r.get('/finance/doctor/:id/balance', FinanceCtl.getDoctorBalance)
 r.get('/finance/doctor/:id/payouts', FinanceCtl.listDoctorPayouts)
 r.get('/finance/doctor/:id/accruals', FinanceCtl.doctorAccruals)
 r.get('/finance/earnings', FinanceCtl.listDoctorEarnings)
 r.post('/finance/journal/:id/reverse', FinanceCtl.reverseJournal)
+r.get('/finance/transactions', FinanceCtl.listAllTransactions)
+r.get('/finance/corporate-ar-breakdown', FinanceCtl.getCorporateARBreakdown)
 
 // Finance Accounts: Vendors
 r.get('/finance/vendors', FinanceAccounts.listVendors)
@@ -302,7 +339,11 @@ r.post('/finance/recurring/:id/run', FinanceAccounts.runRecurring)
 // Finance Accounts: Combined Cash/Bank across modules
 r.get('/finance/combined-cash-bank', FinanceAccounts.combinedCashBank)
 
- 
+// Manager Cash Count (Hospital)
+r.get('/finance/cash-counts', PharmacyCashCounts.list)
+r.post('/finance/cash-counts', PharmacyCashCounts.create)
+r.delete('/finance/cash-counts/:id', PharmacyCashCounts.remove)
+r.get('/finance/cash-counts/summary', PharmacyCashCounts.summary)
 
 // Finance: Users (Finance module-specific)
 r.get('/finance/users', financeUsersList)
@@ -326,6 +367,9 @@ r.post('/finance/sidebar-permissions/:role/reset', FinanceSidebarPerms.resetToDe
 // Audit Logs
 r.get('/audit-logs', Audit.list)
 r.post('/audit-logs', Audit.create)
+
+// Reports
+r.get('/reports/my-activity', auth, Reports.myActivity)
 
 // Finance: Audit Logs (finance-specific store)
 r.get('/finance/audit-logs', FinanceAudit.list)
@@ -392,44 +436,5 @@ r.put('/equipment/condemnations/:id', Equipment.updateCondemnation)
 
 // Equipment: KPIs
 r.get('/equipment/kpis', Equipment.kpis)
-
-// Store Management
-// Masters
-r.get('/store/categories', Store.listCategories)
-r.post('/store/categories', Store.createCategory)
-r.put('/store/categories/:id', Store.updateCategory)
-r.delete('/store/categories/:id', Store.removeCategory)
-
-r.get('/store/units', Store.listUnits)
-r.post('/store/units', Store.createUnit)
-r.put('/store/units/:id', Store.updateUnit)
-r.delete('/store/units/:id', Store.removeUnit)
-
-r.get('/store/locations', Store.listLocations)
-r.post('/store/locations', Store.createLocation)
-r.put('/store/locations/:id', Store.updateLocation)
-r.delete('/store/locations/:id', Store.removeLocation)
-
-r.get('/store/items', Store.listItems)
-r.post('/store/items', Store.createItem)
-r.put('/store/items/:id', Store.updateItem)
-r.delete('/store/items/:id', Store.removeItem)
-
-// Stock & lots
-r.get('/store/lots', Store.listLots)
-r.get('/store/stock', Store.stockSummary)
-
-// Transactions
-r.get('/store/txns', Store.listTxns)
-r.post('/store/receive', Store.receive)
-r.post('/store/issue', Store.issue)
-r.post('/store/transfer', Store.transfer)
-r.post('/store/adjust', Store.adjust)
-
-// Reports
-r.get('/store/reports/worth', Store.inventoryWorth)
-r.get('/store/reports/low-stock', Store.lowStock)
-r.get('/store/reports/expiring', Store.expiring)
-r.get('/store/reports/ledger', Store.ledger)
 
 export default r

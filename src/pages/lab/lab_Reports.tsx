@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { labApi } from '../../utils/api'
+import { fmt12 } from '../../utils/timeFormat'
 
 export default function Lab_Reports() {
   const today = new Date()
@@ -87,29 +88,6 @@ export default function Lab_Reports() {
     } catch { return null }
   }
 
-  function fmt12(hhmm: string): string {
-    try{
-      if (!hhmm) return ''
-      const s = String(hhmm).trim()
-      if (/[ap]m/i.test(s)){
-        const mm = s.match(/^(\d{1,2}):(\d{2})\s*([ap]m)$/i)
-        if (mm){
-          const h = Math.max(1, Math.min(12, parseInt(mm[1],10) || 12))
-          return `${String(h).padStart(2,'0')}:${mm[2]} ${mm[3].toUpperCase()}`
-        }
-        return s.replace(/(am|pm)/i, (m)=>m.toUpperCase())
-      }
-      const parts = s.split(':')
-      if (parts.length < 2) return s
-      const h = parseInt(parts[0],10)
-      const m = parts[1].slice(0,2)
-      if (isNaN(h)) return s
-      const am = h < 12
-      const h12 = (h % 12) || 12
-      return `${String(h12).padStart(2,'0')}:${m} ${am ? 'AM' : 'PM'}`
-    } catch { return hhmm }
-  }
-
   
 
   const apply = () => setTick(t => t + 1)
@@ -159,6 +137,8 @@ export default function Lab_Reports() {
         <SummaryCard title="Total Purchase Amount" value={loading? '…' : `PKR ${(summary.totalPurchasesAmount||0).toLocaleString()}`} bg="bg-emerald-50" border="border-emerald-200" />
         <SummaryCard title="Total Expenses" value={loading? '…' : `PKR ${(summary.totalExpenses||0).toLocaleString()}`} bg="bg-rose-50" border="border-rose-200" />
         <SummaryCard title="Total Revenue" value={loading? '…' : `PKR ${(summary.totalRevenue||0).toLocaleString()}`} bg="bg-indigo-50" border="border-indigo-200" />
+        <SummaryCard title="Total Received" value={loading? '…' : `PKR ${(summary.totalReceived||0).toLocaleString()}`} bg="bg-emerald-50" border="border-emerald-200" />
+        <SummaryCard title="Total Receivable" value={loading? '…' : `PKR ${(summary.totalReceivable||0).toLocaleString()}`} bg="bg-amber-50" border="border-amber-200" />
         <SummaryCard title="Pending Results" value={loading? '…' : `${summary.pendingResults||0}`} bg="bg-cyan-50" border="border-cyan-200" />
         <SummaryCard title="Stock Value" value={loading? '…' : `PKR ${(invStats?.stockSaleValue||0).toLocaleString()}`} bg="bg-amber-50" border="border-amber-200" />
         <SummaryCard title="Low Stock Items" value={loading? '…' : `${invStats?.lowStockCount||0}`} bg="bg-amber-50" border="border-amber-200" />

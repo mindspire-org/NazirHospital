@@ -22,6 +22,9 @@ export const orderCreateSchema = z.object({
   subtotal: z.coerce.number().nonnegative().optional().default(0),
   discount: z.coerce.number().nonnegative().optional().default(0),
   net: z.coerce.number().nonnegative().optional().default(0),
+  receivedAmount: z.coerce.number().nonnegative().optional(),
+  paymentMethod: z.string().optional(),
+  paymentNote: z.string().optional(),
   referringConsultant: z.string().optional(),
   tokenNo: z.string().optional(),
   // Corporate billing
@@ -45,4 +48,5 @@ export const orderTrackUpdateSchema = z.object({
   reportingTime: z.string().optional(),
   status: z.enum(['received','completed','returned']).optional(),
   referringConsultant: z.string().optional(),
+  barcode: z.string().optional(),
 })

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { logAudit } from '../../utils/hospital_audit'
-import { hospitalApi, corporateApi } from '../../utils/api'
+import { corporateApi, hospitalApi } from '../../utils/api'
+import { fmt12 } from '../../utils/timeFormat'
 import Hospital_TokenSlip, { type TokenSlipData } from '../../components/hospital/Hospital_TokenSlip'
 
 type SearchOption = { value: string; label: string }
@@ -135,7 +136,7 @@ export default function Hospital_TokenGenerator() {
           discount: String(Number(t.discount || 0)),
         }))
       } catch (e: any) {
-        alert(e?.message || 'Failed to load token for edit')
+        showToast('error', e?.message || 'Failed to load token for edit')
       } finally {
         if (!cancelled) setLoadingToken(false)
       }
@@ -278,6 +279,8 @@ export default function Hospital_TokenGenerator() {
       }
 
       // No corporate or failed local compute: use backend quote
+      // Skip if schedule is selected - schedule fee takes precedence
+      if (scheduleId) return
       try {
         const res = await hospitalApi.quoteOPDPrice({ departmentId: form.departmentId, doctorId: form.doctor || undefined, visitType: undefined, corporateId: form.billingType === 'Corporate' ? (form.corporateCompanyId || undefined) : undefined }) as any
         if (!cancelled) {
@@ -291,9 +294,16 @@ export default function Hospital_TokenGenerator() {
     run()
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.departmentId, form.doctor, form.corporateCompanyId, form.billingType])
+  }, [form.departmentId, form.doctor, form.corporateCompanyId, form.billingType, scheduleId])
 
-  // Load doctor schedules for selected date (non-IPD only)
+  // When schedule changes, update consultationFee to match schedule fee
+  useEffect(() => {
+    if (!scheduleId) return
+    const s = schedules.find(x => String(x._id) === String(scheduleId))
+    if (s && s.fee != null) {
+      setForm(prev => ({ ...prev, consultationFee: String(s.fee) }))
+    }
+  }, [scheduleId, schedules])
   useEffect(() => {
     let cancelled = false
     async function loadSchedules() {
@@ -303,8 +313,31 @@ export default function Hospital_TokenGenerator() {
         const items = (res?.schedules || []) as any[]
         if (cancelled) return
         setSchedules(items)
-        if (items.length === 1) setScheduleId(String(items[0]._id))
-        else setScheduleId('')
+        
+        // Find schedule matching current time
+        const now = new Date()
+        const nowMin = now.getHours() * 60 + now.getMinutes()
+        const matchingSchedule = items.find((s: any) => {
+          const startMin = toMin(s.startTime)
+          const endMin = toMin(s.endTime)
+          return nowMin >= startMin && nowMin < endMin
+        })
+        
+        if (matchingSchedule) {
+          setScheduleId(String(matchingSchedule._id))
+          // Also update consultationFee to match schedule fee
+          if (matchingSchedule.fee != null) {
+            setForm(prev => ({ ...prev, consultationFee: String(matchingSchedule.fee) }))
+          }
+        } else if (items.length === 1) {
+          setScheduleId(String(items[0]._id))
+          // Also update consultationFee to match schedule fee
+          if (items[0].fee != null) {
+            setForm(prev => ({ ...prev, consultationFee: String(items[0].fee) }))
+          }
+        } else {
+          setScheduleId('')
+        }
       } catch { setSchedules([]); setScheduleId('') }
     }
     if (!isIPD) loadSchedules()
@@ -313,6 +346,7 @@ export default function Hospital_TokenGenerator() {
 
   function toMin(hhmm: string) { const [h, m] = (hhmm || '').split(':').map(x => parseInt(x, 10) || 0); return (h * 60) + m }
   function fromMin(min: number) { const h = Math.floor(min / 60).toString().padStart(2, '0'); const m = (min % 60).toString().padStart(2, '0'); return `${h}:${m}` }
+  const to12Hour = fmt12
 
   useEffect(() => {
     let cancelled = false
@@ -534,7 +568,7 @@ export default function Hospital_TokenGenerator() {
     const selDoc = doctors.find(d => String(d.id) === String(form.doctor))
     const selDept = departments.find(d => String(d.id) === String(form.departmentId))
     if (!form.departmentId) {
-      alert('Please select a department before generating a token')
+      showToast('error', 'Please select a department before generating a token')
       return
     }
     try {
@@ -559,12 +593,12 @@ export default function Hospital_TokenGenerator() {
         }
         await hospitalApi.updateToken(String(tokenId), payload)
         logAudit('token_edit', `tokenId=${tokenId}, dept=${form.departmentId}, doctor=${selDoc?.name || 'N/A'}, grossFee=${feeGross}, discount=${disc}`)
-        alert('Token updated')
+        showToast('success', 'Token updated')
         return
       }
       // Inline IPD admit flow: if department is IPD, require bed and admit immediately
       if (isIPD) {
-        if (!ipdBedId) { alert('Please select a bed for IPD admission'); return }
+        if (!ipdBedId) { showToast('error', 'Please select a bed for IPD admission'); return }
         const payload: any = {
           departmentId: form.departmentId,
           doctorId: form.doctor || undefined,
@@ -624,6 +658,7 @@ export default function Hospital_TokenGenerator() {
       const payload: any = {
         departmentId: form.departmentId,
         doctorId: form.doctor || undefined,
+        visitType: 'new',
         discount: Number(form.discount) || 0,
         paymentRef: undefined,
       }
@@ -633,6 +668,8 @@ export default function Hospital_TokenGenerator() {
         if (form.corporateCoPayPercent) payload.corporateCoPayPercent = Number(form.corporateCoPayPercent)
         if (form.corporateCoverageCap) payload.corporateCoverageCap = Number(form.corporateCoverageCap)
       }
+      if (form.billingType === 'Cash') payload.paidMethod = 'Cash'
+      else if (form.billingType === 'Card') payload.paidMethod = 'Bank'
       // Patient demographics for saving/updating patient
       payload.patientName = form.patientName || undefined
       payload.phone = form.phone || undefined
@@ -646,6 +683,10 @@ export default function Hospital_TokenGenerator() {
       if (!isIPD && scheduleId) {
         (payload as any).scheduleId = scheduleId
         const s = schedules.find(x => String(x._id) === String(scheduleId))
+        // Use schedule fee if available
+        if (s && s.fee != null) {
+          payload.overrideFee = Number(s.fee)
+        }
         if (s && selectedSlotNo) {
           const slotMinutes = Math.max(5, Number(s.slotMinutes || 15))
           const startMin = toMin(s.startTime) + (selectedSlotNo - 1) * slotMinutes
@@ -691,7 +732,7 @@ export default function Hospital_TokenGenerator() {
       setShowSlip(true)
       logAudit('token_generate', `patient=${form.patientName || 'N/A'}, dept=${form.departmentId}, doctor=${selDoc?.name || 'N/A'}, fee=${res?.pricing?.finalFee ?? finalFee}`)
     } catch (err: any) {
-      alert(err?.message || 'Failed to generate token')
+      showToast('error', err?.message || 'Failed to generate token')
     }
     reset()
   }
@@ -819,11 +860,26 @@ export default function Hospital_TokenGenerator() {
                     <label className="mb-1 block text-sm font-medium text-slate-700">Doctor Schedule</label>
                     <select value={scheduleId} onChange={e => setScheduleId(e.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200">
                       <option value="">{schedules.length ? 'Select schedule' : 'No schedules found'}</option>
-                      {schedules.map(s => (
-                        <option key={s._id} value={s._id}>{s.startTime} - {s.endTime} • {s.slotMinutes} min</option>
-                      ))}
+                      {schedules.map(s => {
+                        const now = new Date()
+                        const nowMin = now.getHours() * 60 + now.getMinutes()
+                        const startMin = toMin(s.startTime)
+                        const endMin = toMin(s.endTime)
+                        const isCurrent = nowMin >= startMin && nowMin < endMin
+                        return (
+                          <option key={s._id} value={s._id}>
+                            {isCurrent ? '● ' : ''}{to12Hour(s.startTime)} - {to12Hour(s.endTime)} • {s.slotMinutes} min{s.fee != null ? ` • Fee: Rs. ${s.fee}` : ''}{isCurrent ? ' (Current)' : ''}
+                          </option>
+                        )
+                      })}
                     </select>
-                    <p className="mt-1 text-xs text-slate-500">Select a schedule to pick a slot.</p>
+                    {schedules.length > 0 && !schedules.some(s => {
+                      const now = new Date()
+                      const nowMin = now.getHours() * 60 + now.getMinutes()
+                      return nowMin >= toMin(s.startTime) && nowMin < toMin(s.endTime)
+                    }) && (
+                      <p className="mt-1 text-xs text-amber-600">⚠ No schedule matches current time. Select a schedule manually.</p>
+                    )}
                     {scheduleId && (
                       <div className="mt-3 rounded-md border border-slate-200 p-2">
                         <div className="mb-2 flex items-center justify-between">
@@ -835,7 +891,7 @@ export default function Hospital_TokenGenerator() {
                             const base = r.status === 'free' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : (r.status === 'appt' ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-rose-50 border-rose-200 text-rose-700')
                             const isSel = selectedSlotNo === r.slotNo
                             const selCls = isSel ? 'ring-2 ring-violet-400' : ''
-                            const label = r.status === 'token' && r.tokenNo ? `${r.start} - ${r.end} • #${r.slotNo} • Token ${r.tokenNo}` : `${r.start} - ${r.end} • #${r.slotNo}`
+                            const label = r.status === 'token' && r.tokenNo ? `${to12Hour(r.start)} - ${to12Hour(r.end)} • #${r.slotNo} • Token ${r.tokenNo}` : `${to12Hour(r.start)} - ${to12Hour(r.end)} • #${r.slotNo}`
                             const title = r.status === 'token' && r.tokenNo ? `Token ${r.tokenNo}` : (r.status === 'appt' ? 'Appointment' : 'Free')
                             return (
                               <button key={r.slotNo} type="button" title={title} disabled={r.status !== 'free'} onClick={() => setSelectedSlotNo(r.slotNo)} className={`rounded-md border px-2 py-1 text-xs ${base} ${selCls} disabled:opacity-50`}>

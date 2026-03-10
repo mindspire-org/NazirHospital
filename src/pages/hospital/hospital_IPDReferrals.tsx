@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { hospitalApi, labApi } from '../../utils/api'
 import { previewIpdReferralPdf } from '../../utils/ipdReferralPdf'
+import Toast, { type ToastState } from '../../components/ui/Toast'
 
 export default function Hospital_IPDReferrals(){
   const [status, setStatus] = useState<'New'|'Accepted'|'Rejected'|'Admitted'|''>('')
@@ -14,15 +15,26 @@ export default function Hospital_IPDReferrals(){
   const [deps, setDeps] = useState<any[]>([])
   const [docs, setDocs] = useState<any[]>([])
   const [beds, setBeds] = useState<any[]>([])
+  const [toast, setToast] = useState<ToastState>(null)
 
   useEffect(()=>{ load() }, [status])
   useEffect(()=>{ (async()=>{ try{ const [a,b] = await Promise.all([hospitalApi.listDepartments() as any, hospitalApi.listDoctors() as any]); setDeps((a?.departments||a)||[]); setDocs((b?.doctors||b)||[]);}catch{}})() }, [])
   useEffect(()=>{ if (openAdmit?.open) loadBeds() }, [openAdmit])
 
+  function bedDisplayName(b: any){
+    const floor = String(b?.floorName || '').trim()
+    const loc = String(b?.locationName || '').trim()
+    const label = String(b?.label || '').trim()
+    const parts = [floor, loc, label].filter(Boolean)
+    return parts.join('/') || label || '-'
+  }
+
   async function loadBeds(){
+    setBeds([])
     try{
-      const res = await hospitalApi.listBeds({ status: 'available' }) as any
-      setBeds((res?.beds||res||[]) as any[])
+      const res = await hospitalApi.listBeds() as any
+      const items = (res?.beds || res || []) as any
+      setBeds(Array.isArray(items) ? items : [])
     }catch{ setBeds([]) }
   }
 
@@ -40,7 +52,7 @@ export default function Hospital_IPDReferrals(){
           try { const arr = JSON.parse(localStorage.getItem('hospital.ipd.referrals')||'[]') as any[]; ref = arr.find(x=> String(x._id||x.id)===String(id)) } catch {}
         }
       }
-      if (!ref) { alert('Referral not found'); return }
+      if (!ref) { setToast({ type: 'error', message: 'Referral not found' }); return }
       const snap = ref.patientSnapshot || ref.patient || {}
       let patient = {
         name: snap.fullName || snap.name || '-',
@@ -67,7 +79,7 @@ export default function Hospital_IPDReferrals(){
         referredBy: ref?.referredBy?.doctorName,
       }
       await previewIpdReferralPdf({ settings, patient, referral })
-    }catch(e:any){ alert(e?.message || 'Failed to open print preview') }
+    }catch(e:any){ setToast({ type: 'error', message: e?.message || 'Failed to open print preview' }) }
   }
 
   async function load(){
@@ -113,6 +125,13 @@ export default function Hospital_IPDReferrals(){
     e.preventDefault()
     const id = openAdmit?.id; if (!id) return
     const f = admitForm
+    if (f.bedId) {
+      const b = beds.find(x => String(x._id || x.id) === String(f.bedId))
+      if (b && String(b.status || '').toLowerCase() === 'occupied') {
+        setToast({ type: 'error', message: 'Selected bed is occupied. Please choose an available bed.' })
+        return
+      }
+    }
     try{
       await hospitalApi.admitFromReferral(id, { departmentId: f.departmentId, doctorId: f.doctorId || undefined, bedId: f.bedId || undefined, wardId: f.wardId || undefined, deposit: f.deposit? Number(f.deposit): undefined, tokenFee: f.tokenFee? Number(f.tokenFee): undefined })
     }catch{
@@ -241,7 +260,15 @@ export default function Hospital_IPDReferrals(){
                 <span className="block text-slate-600 mb-1">Bed (available)</span>
                 <select value={admitForm.bedId} onChange={e=>{ const v=e.target.value; setAdmitForm(f=>{ const b = beds.find(x=> String(x._id||x.id)===v); return { ...f, bedId: v, tokenFee: (b?.charges!=null? String(b.charges): f.tokenFee) } }) }} className="w-full rounded-md border border-slate-300 px-3 py-2">
                   <option value="">Select bed (optional)</option>
-                  {beds.map((b:any)=> (<option key={String(b._id||b.id)} value={String(b._id||b.id)}>{b.label}{b.charges!=null?` — ${b.charges}`:''}</option>))}
+                  {beds.map((b:any)=> (
+                    <option
+                      key={String(b._id||b.id)}
+                      value={String(b._id||b.id)}
+                      disabled={String(b?.status || '').toLowerCase() === 'occupied'}
+                    >
+                      {bedDisplayName(b)}{String(b?.status || '').toLowerCase() === 'occupied' ? ' (Occupied)' : ''}{b.charges!=null?` — ${b.charges}`:''}
+                    </option>
+                  ))}
                 </select>
               </label>
               <div className="grid grid-cols-2 gap-2">
@@ -258,6 +285,7 @@ export default function Hospital_IPDReferrals(){
       )}
 
       {/* Legacy view modal removed in favor of direct Print preview */}
+      <Toast toast={toast} onClose={()=>setToast(null)} />
     </div>
   )
 }

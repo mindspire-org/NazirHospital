@@ -78,7 +78,7 @@ export default function Hospital_TokenSlip({ open, onClose, data, autoPrint = fa
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 print:bg-white print:static">
-      <div id="hospital-receipt" className="w-[360px] rounded-md border border-slate-300 bg-white p-4 shadow print:shadow-none print:border-0 print:w-[300px]">
+      <div id="hospital-receipt" className="max-h-[80vh] w-[360px] overflow-y-auto rounded-md border border-slate-300 bg-white p-4 shadow print:max-h-none print:overflow-visible print:shadow-none print:border-0 print:w-[300px]">
         {/* Header */}
         <div className="text-center">
           {settings.logoDataUrl && <img src={settings.logoDataUrl} alt="logo" className="mx-auto mb-2 h-10 w-10 object-contain" />}
@@ -89,7 +89,7 @@ export default function Hospital_TokenSlip({ open, onClose, data, autoPrint = fa
 
         <hr className="my-2 border-dashed" />
 
-        <div className="text-center text-sm font-semibold underline">OPD Token</div>
+        <div className="text-center text-sm font-semibold underline">{data.departmentName ? `${data.departmentName} Token` : 'Token'}</div>
 
         <div className="mt-2 flex flex-wrap justify-between gap-1 text-xs text-slate-700">
           <div>User: {user || getCurrentUser()}</div>

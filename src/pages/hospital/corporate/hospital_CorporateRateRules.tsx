@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { corporateApi, hospitalApi, labApi, diagnosticApi } from '../../../utils/api'
+import Toast, { type ToastState } from '../../../components/ui/Toast'
+import ConfirmDialog from '../../../components/ui/ConfirmDialog'
 
 const SCOPES = ['OPD','LAB','DIAG','IPD'] as const
 const RULE_TYPES: Record<typeof SCOPES[number], Array<{ label: string; value: string }>> = {
@@ -45,6 +47,8 @@ export default function Hospital_CorporateRateRules(){
   const [total, setTotal] = useState<number | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [toast, setToast] = useState<ToastState>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string>('')
 
   useEffect(()=>{
     let mounted = true
@@ -134,7 +138,7 @@ export default function Hospital_CorporateRateRules(){
 
   async function create(){
     try {
-      if (!createForm.companyId) { alert('Select company'); return }
+      if (!createForm.companyId) { setToast({ type: 'error', message: 'Select company' }); return }
       setCreating(true)
       const payload: any = {
         companyId: createForm.companyId,
@@ -159,7 +163,8 @@ export default function Hospital_CorporateRateRules(){
       setCreateForm((f:any)=> ({ ...f, refId: '', value: 0, priority: 100 }))
       setShowAdd(false)
       await load()
-    } catch (e: any){ alert(e?.message || 'Failed to create rate rule') }
+      setToast({ type: 'success', message: editId ? 'Rate rule updated' : 'Rate rule created' })
+    } catch (e: any){ setToast({ type: 'error', message: e?.message || 'Failed to create rate rule' }) }
     finally { setCreating(false) }
   }
 
@@ -182,11 +187,19 @@ export default function Hospital_CorporateRateRules(){
   }
 
   async function remove(id: string){
-    if (!confirm('Delete this rule?')) return
-    try { await corporateApi.deleteRateRule(id); await load() } catch (e: any){ alert(e?.message || 'Failed to delete rule') }
+    setConfirmDeleteId(String(id))
+  }
+
+  async function confirmDelete(){
+    const id = confirmDeleteId
+    setConfirmDeleteId('')
+    if (!id) return
+    try { await corporateApi.deleteRateRule(id); await load(); setToast({ type: 'success', message: 'Deleted' }) }
+    catch (e: any){ setToast({ type: 'error', message: e?.message || 'Failed to delete rule' }) }
   }
 
   return (
+    <>
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold text-slate-800">Corporate Rate Rules</h2>
@@ -399,7 +412,17 @@ export default function Hospital_CorporateRateRules(){
           </div>
         </div>
       </section>
+      <Toast toast={toast} onClose={()=>setToast(null)} />
     </div>
+    <ConfirmDialog
+      open={!!confirmDeleteId}
+      title="Confirm"
+      message="Delete this rule?"
+      confirmText="Delete"
+      onCancel={()=>setConfirmDeleteId('')}
+      onConfirm={confirmDelete}
+    />
+    </>
   )
 }
 

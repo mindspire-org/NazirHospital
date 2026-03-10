@@ -6,10 +6,13 @@ const TokenSchema = new Schema({
   patientId: { type: Schema.Types.ObjectId, ref: 'Lab_Patient', index: true },
   mrn: { type: String },
   patientName: { type: String },
+  createdByUserId: { type: Schema.Types.ObjectId, ref: 'Hospital_User', index: true },
+  createdByUsername: { type: String, index: true },
   departmentId: { type: Schema.Types.ObjectId, ref: 'Hospital_Department', required: true },
   doctorId: { type: Schema.Types.ObjectId, ref: 'Hospital_Doctor' },
   encounterId: { type: Schema.Types.ObjectId, ref: 'Hospital_Encounter' },
   corporateId: { type: Schema.Types.ObjectId, ref: 'Corporate_Company' },
+  paidMethod: { type: String, enum: ['Cash','Bank','AR'], default: 'Cash', index: true },
   fee: { type: Number },
   discount: { type: Number, default: 0 },
   status: { type: String, enum: ['queued','in-progress','completed','returned','cancelled'], default: 'queued', index: true },
@@ -33,10 +36,13 @@ export type HospitalTokenDoc = {
   patientId?: string
   mrn?: string
   patientName?: string
+  createdByUserId?: string
+  createdByUsername?: string
   departmentId: string
   doctorId?: string
   encounterId?: string
   corporateId?: string
+  paidMethod?: 'Cash'|'Bank'|'AR'
   fee?: number
   discount?: number
   status: 'queued'|'in-progress'|'completed'|'returned'|'cancelled'

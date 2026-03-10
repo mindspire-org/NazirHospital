@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { diagnosticApi } from '../../utils/api'
+import Toast from '../ui/Toast'
 
 export type EditSamplePayload = {
   tests?: string[]
@@ -42,6 +43,9 @@ export default function Diagnostic_EditSampleDialog({
   const [address, setAddress] = useState(order.patient?.address || '')
   const [discount, setDiscount] = useState<number>(0)
 
+  // Toast notifications
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null)
+
   useEffect(()=>{ (async()=>{
     try { const res = await diagnosticApi.listTests({ limit: 1000 }) as any; setTests((res?.items||res||[]).map((t:any)=>({ id: String(t._id||t.id), name: t.name, price: Number(t.price||0) })))} catch { setTests([]) }
   })() }, [])
@@ -74,7 +78,7 @@ export default function Diagnostic_EditSampleDialog({
       onSaved(updated)
       onClose()
     } catch (e) {
-      alert('Failed to save changes')
+      setToast({ type: 'error', message: 'Failed to save changes' })
     } finally {
       setLoading(false)
     }
@@ -146,6 +150,7 @@ export default function Diagnostic_EditSampleDialog({
           <button onClick={onClose} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm">Cancel</button>
           <button onClick={save} disabled={loading || selected.length===0 || !fullName} className="rounded-md bg-violet-700 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">{loading? 'Saving...' : 'Save Changes'}</button>
         </div>
+        <Toast toast={toast} onClose={() => setToast(null)} />
       </div>
     </div>
   )

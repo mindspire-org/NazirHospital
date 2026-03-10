@@ -11,40 +11,51 @@ node_modules
 dist
 dist-ssr
 *.local
-electron
-# Environment files
-.env
-.env.*
-!.env.example
 
-# Electron / packaging outputs
+# Env / secrets
+.env
+electron/.env
+*.env
+!.env.example
+!backend/.env.example
+
+# Runtime data
+*.sqlite
+*.sqlite3
+*.db
+
+# Coverage / caches
+coverage
+.nyc_output
+.eslintcache
+.stylelintcache
+.parcel-cache
+.turbo
+.cache
+.vite
+
+# Electron / packaging
+out
 release
+releases
 *.exe
 *.msi
 *.dmg
 *.AppImage
+*.snap
 
-# Backend build output
-backend/dist
-backend/node_modules
-
-# Coverage / cache
-coverage
-.cache
-.eslintcache
-.turbo
-.parcel-cache
-.vite
-
-# OS files
-Thumbs.db
-Desktop.ini
+# Misc
+.tmp
+tmp
+temp
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
+Thumbs.db
+Desktop.ini
 *.suo
 *.ntvs*
 *.njsproj

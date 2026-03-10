@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { hospitalApi } from '../../utils/api'
+import Toast, { type ToastState } from '../../components/ui/Toast'
 
 export default function Hospital_EquipmentKpis(){
   type KPIResponse = {
@@ -12,6 +13,7 @@ export default function Hospital_EquipmentKpis(){
   const [to, setTo] = useState('')
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState<KPIResponse | null>(null)
+  const [toast, setToast] = useState<ToastState>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -21,7 +23,7 @@ export default function Hospital_EquipmentKpis(){
         const res = await hospitalApi.equipmentKpis({ from: from || undefined, to: to || undefined }) as any
         if (!cancelled) setData(res)
       } catch (e: any) {
-        alert(e?.message || 'Failed to load KPIs')
+        setToast({ type: 'error', message: e?.message || 'Failed to load KPIs' })
       } finally { if (!cancelled) setLoading(false) }
     }
     load()
@@ -185,6 +187,7 @@ export default function Hospital_EquipmentKpis(){
           </div>
         )}
       </div>
+      <Toast toast={toast} onClose={()=>setToast(null)} />
     </div>
   )
 }

@@ -1,0 +1,366 @@
+﻿<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: file:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline';" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>HealthSpire Pharmacy Manegment System â€” Loading</title>
+
+    <!-- Modern font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      :root {
+        --primary: #0ea5e9;
+        --primary-dark: #0284c7;
+        --secondary: #22d3ee;
+        --accent: #60a5fa;
+        --dark: #0f172a;
+        --light: #f8fafc;
+        --glass: rgba(255, 255, 255, 0.1);
+        --shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+      }
+
+      body {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+      }
+
+      /* Animated background particles */
+      .particles {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        pointer-events: none;
+      }
+
+      .particle {
+        position: absolute;
+        width: 4px;
+        height: 4px;
+        background: var(--secondary);
+        border-radius: 50%;
+        opacity: 0.6;
+        animation: float 8s infinite ease-in-out;
+      }
+
+      @keyframes float {
+        0%, 100% { transform: translateY(0) translateX(0); opacity: 0.6; }
+        25% { transform: translateY(-20px) translateX(10px); opacity: 0.8; }
+        50% { transform: translateY(-10px) translateX(-10px); opacity: 0.4; }
+        75% { transform: translateY(-30px) translateX(5px); opacity: 0.7; }
+      }
+
+      /* Main splash container */
+      .splash-container {
+        background: var(--glass);
+        backdrop-filter: blur(20px) saturate(180%);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 24px;
+        padding: 48px;
+        box-shadow: var(--shadow);
+        max-width: 480px;
+        width: 90%;
+        text-align: center;
+        position: relative;
+        animation: slideUp 0.8s ease-out;
+      }
+
+      @keyframes slideUp {
+        from {
+          opacity: 0;
+          transform: translateY(30px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* Icon container */
+      .icon-container {
+        width: 120px;
+        height: 120px;
+        margin: 0 auto 32px;
+        position: relative;
+        animation: pulse 2s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+      }
+
+      .icon-bg {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
+        border-radius: 20px;
+        opacity: 0.1;
+        animation: rotate 10s linear infinite;
+      }
+
+      @keyframes rotate {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+
+      .pharmacy-icon {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
+        border-radius: 20px;
+        box-shadow: 0 10px 40px rgba(14, 165, 233, 0.3);
+      }
+
+      .logo-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 20px;
+      }
+
+      /* Text content */
+      .app-title {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--light);
+        margin-bottom: 8px;
+        letter-spacing: -0.02em;
+      }
+
+      .app-subtitle {
+        font-size: 16px;
+        color: rgba(248, 250, 252, 0.7);
+        margin-bottom: 32px;
+        font-weight: 400;
+      }
+
+      /* Loading progress */
+      .loading-container {
+        margin-top: 24px;
+      }
+
+      .progress-bar {
+        height: 4px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 2px;
+        overflow: hidden;
+        margin-bottom: 16px;
+      }
+
+      .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, var(--primary), var(--secondary));
+        border-radius: 2px;
+        width: 0%;
+        animation: loadProgress 2s ease-out forwards;
+        box-shadow: 0 0 20px rgba(14, 165, 233, 0.5);
+      }
+
+      @keyframes loadProgress {
+        0% { width: 0%; }
+        100% { width: 100%; }
+      }
+
+      .loading-text {
+        font-size: 14px;
+        color: rgba(248, 250, 252, 0.6);
+        font-weight: 500;
+        animation: fadeText 2s ease-in-out;
+      }
+
+      @keyframes fadeText {
+        0% { opacity: 0.4; }
+        50% { opacity: 0.8; }
+        100% { opacity: 1; }
+      }
+
+      /* Pharmacy elements decoration */
+      .decoration {
+        position: absolute;
+        pointer-events: none;
+      }
+
+      .pill {
+        width: 30px;
+        height: 12px;
+        background: linear-gradient(90deg, var(--accent), var(--secondary));
+        border-radius: 6px;
+        opacity: 0.6;
+        animation: floatPill 6s ease-in-out infinite;
+      }
+
+      @keyframes floatPill {
+        0%, 100% { transform: translateY(0) rotate(0deg); }
+        50% { transform: translateY(-10px) rotate(45deg); }
+      }
+
+      .cross {
+        width: 20px;
+        height: 20px;
+        position: relative;
+        opacity: 0.5;
+        animation: floatCross 7s ease-in-out infinite;
+      }
+
+      .cross::before,
+      .cross::after {
+        content: '';
+        position: absolute;
+        background: var(--secondary);
+        border-radius: 2px;
+      }
+
+      .cross::before {
+        width: 100%;
+        height: 4px;
+        top: 50%;
+        left: 0;
+        transform: translateY(-50%);
+      }
+
+      .cross::after {
+        width: 4px;
+        height: 100%;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+
+      @keyframes floatCross {
+        0%, 100% { transform: translateY(0) rotate(0deg); }
+        50% { transform: translateY(-15px) rotate(180deg); }
+      }
+
+      /* Responsive */
+      @media (max-width: 640px) {
+        .splash-container {
+          padding: 32px 24px;
+          margin: 20px;
+        }
+
+        .icon-container {
+          width: 80px;
+          height: 80px;
+          margin-bottom: 24px;
+        }
+
+        .logo-img {
+          width: 80px;
+          height: 80px;
+        }
+
+        .app-title {
+          font-size: 24px;
+        }
+
+        .app-subtitle {
+          font-size: 14px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Background particles -->
+    <div class="particles" id="particles"></div>
+
+    <!-- Decorative pharmacy elements -->
+    <div class="decoration pill" style="top: 10%; left: 10%;"></div>
+    <div class="decoration cross" style="top: 15%; right: 15%;"></div>
+    <div class="decoration pill" style="bottom: 20%; left: 8%;"></div>
+    <div class="decoration cross" style="bottom: 25%; right: 10%;"></div>
+
+    <!-- Main splash content -->
+    <div class="splash-container">
+      <div class="icon-container">
+        <div class="icon-bg"></div>
+        <div class="pharmacy-icon">
+          <img src="../public/hospital_icon.jpeg" onerror="this.onerror=null;this.src='../dist/hospital_icon.jpeg';" alt="Hospital Logo" class="logo-img" />
+        </div>
+      </div>
+
+      <h1 class="app-title">HealthSpire</h1>
+      <p class="app-subtitle">HealthSpire Hospital Management System</p>
+
+      <div class="loading-container">
+        <div class="progress-bar">
+          <div class="progress-fill"></div>
+        </div>
+        <div class="loading-text">Initializing Hospital modules...</div>
+      </div>
+    </div>
+
+    <script>
+      // Generate floating particles
+      function createParticles() {
+        const container = document.getElementById('particles');
+        const particleCount = 20;
+        
+        for (let i = 0; i < particleCount; i++) {
+          const particle = document.createElement('div');
+          particle.className = 'particle';
+          particle.style.left = Math.random() * 100 + '%';
+          particle.style.top = Math.random() * 100 + '%';
+          particle.style.animationDelay = Math.random() * 8 + 's';
+          particle.style.animationDuration = (8 + Math.random() * 4) + 's';
+          container.appendChild(particle);
+        }
+      }
+
+      // Loading text variations
+      const loadingTexts = [
+        "Initializing Hospital Modules...",
+        "Loading medication database...",
+        "Setting up secure connections...",
+        "Preparing user interface...",
+        "Almost ready..."
+      ];
+
+      let textIndex = 0;
+      function updateLoadingText() {
+        const textElement = document.querySelector('.loading-text');
+        if (textElement && textIndex < loadingTexts.length) {
+          textElement.textContent = loadingTexts[textIndex];
+          textIndex++;
+          setTimeout(updateLoadingText, 500);
+        }
+      }
+
+      // Close splash after exactly 2 seconds
+      function closeSplash() {
+        try {
+          if (window.electronAPI && window.electronAPI.closeSplash) {
+            window.electronAPI.closeSplash();
+          } else {
+            window.close();
+          }
+        } catch {
+          try { window.close(); } catch {}
+        }
+      }
+
+      // Initialize
+      createParticles();
+      setTimeout(updateLoadingText, 300);
+      setTimeout(closeSplash, 2000); // Exactly 2 seconds
+    </script>
+  </body>
+</html>

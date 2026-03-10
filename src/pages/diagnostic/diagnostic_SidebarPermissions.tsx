@@ -244,16 +244,14 @@ export default function Diagnostic_SidebarPermissions() {
 
   if (loading) {
     return (
-      <div className="p-4 md:p-6">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-slate-600">Loading permissions...</div>
-        </div>
+      <div className="flex items-center justify-center h-64">
+        <div className="text-slate-600">Loading permissions...</div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="space-y-6">
       {toast && (
         <div className="fixed right-4 top-4 z-60 w-[min(92vw,420px)]">
           <div

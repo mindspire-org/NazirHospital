@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { hospitalApi } from '../../utils/api'
+import Toast, { type ToastState } from '../../components/ui/Toast'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 export default function Hospital_Equipment(){
   type Equipment = {
@@ -29,6 +31,8 @@ export default function Hospital_Equipment(){
   type Department = { id: string; name: string }
 
   const [items, setItems] = useState<Equipment[]>([])
+  const [toast, setToast] = useState<ToastState>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string>('')
   const [departments, setDepartments] = useState<Department[]>([])
   const [q, setQ] = useState('')
   const [category, setCategory] = useState('')
@@ -125,7 +129,8 @@ export default function Hospital_Equipment(){
       await hospitalApi.createEquipment(payload)
       setShowAdd(false)
       setRefresh(x => x + 1)
-    } catch (e: any) { alert(e?.message || 'Failed to save') }
+      setToast({ type: 'success', message: 'Saved' })
+    } catch (e: any) { setToast({ type: 'error', message: e?.message || 'Failed to save' }) }
   }
 
   const openEdit = (id: string) => {
@@ -155,12 +160,25 @@ export default function Hospital_Equipment(){
       await hospitalApi.updateEquipment(editId, payload)
       setEditId(null)
       setRefresh(x => x + 1)
-    } catch (e: any) { alert(e?.message || 'Failed to update') }
+      setToast({ type: 'success', message: 'Updated' })
+    } catch (e: any) { setToast({ type: 'error', message: e?.message || 'Failed to update' }) }
   }
 
   const deleteItem = async (id: string) => {
-    if (!confirm('Delete this equipment?')) return
-    try { await hospitalApi.deleteEquipment(id); setItems(prev => prev.filter(x => x.id !== id)) } catch (e: any) { alert(e?.message || 'Failed to delete') }
+    setConfirmDeleteId(id)
+  }
+
+  const confirmDelete = async () => {
+    const id = confirmDeleteId
+    setConfirmDeleteId('')
+    if (!id) return
+    try {
+      await hospitalApi.deleteEquipment(id)
+      setItems(prev => prev.filter(x => x.id !== id))
+      setToast({ type: 'success', message: 'Deleted' })
+    } catch (e: any) {
+      setToast({ type: 'error', message: e?.message || 'Failed to delete' })
+    }
   }
 
   const openPPM = (id: string) => { setPpmForId(id); setPpmForm({ performedAt: new Date().toISOString().slice(0,10), nextDue: '', doneBy: '', notes: '', cost: '' }) }
@@ -172,10 +190,11 @@ export default function Hospital_Equipment(){
       await hospitalApi.createEquipmentPPM(payload)
       setPpmForId(null)
       setRefresh(x => x + 1)
-    } catch (e: any) { alert(e?.message || 'Failed to log PPM') }
+      setToast({ type: 'success', message: 'PPM logged' })
+    } catch (e: any) { setToast({ type: 'error', message: e?.message || 'Failed to log PPM' }) }
   }
 
-  const openCalibration = (id: string) => { setCalibForId(id); setCalibForm({ performedAt: new Date().toISOString().slice(0,10), nextDue: '', labName: '', certificateNo: '', result: 'Pass', validTo: '', notes: '', cost: '' }) }
+  const openCalibration = (id: string) => { setCalibForId(id); setCalibForm({ performedAt: new Date().toISOString().slice(0,10), nextDue: '', labName: '', certificateNo: '', result: '', validTo: '', notes: '', cost: '' }) }
   const saveCalibration = async () => {
     if (!calibForId) return
     if (!calibForm.performedAt) return
@@ -184,7 +203,8 @@ export default function Hospital_Equipment(){
       await hospitalApi.createEquipmentCalibration(payload as any)
       setCalibForId(null)
       setRefresh(x => x + 1)
-    } catch (e: any) { alert(e?.message || 'Failed to log calibration') }
+      setToast({ type: 'success', message: 'Calibration logged' })
+    } catch (e: any) { setToast({ type: 'error', message: e?.message || 'Failed to log calibration' }) }
   }
 
   // History (PPM / Calibration)
@@ -275,7 +295,8 @@ export default function Hospital_Equipment(){
       await hospitalApi.createEquipmentBreakdown(payload as any)
       setBreakdownForId(null)
       setRefresh(x => x + 1)
-    } catch (e: any) { alert(e?.message || 'Failed to log breakdown') }
+      setToast({ type: 'success', message: 'Breakdown logged' })
+    } catch (e: any) { setToast({ type: 'error', message: e?.message || 'Failed to log breakdown' }) }
   }
 
   const openCondemn = (id: string) => { setCondemnForId(id); setCondemnForm({ proposedAt: new Date().toISOString().slice(0,10), reason: '', approvedBy: '', approvedAt: '', status: 'Proposed', disposalMethod: '', disposalDate: '', notes: '' }) }
@@ -296,10 +317,12 @@ export default function Hospital_Equipment(){
       await hospitalApi.createEquipmentCondemnation(payload as any)
       setCondemnForId(null)
       setRefresh(x => x + 1)
-    } catch (e: any) { alert(e?.message || 'Failed to log condemnation') }
+      setToast({ type: 'success', message: 'Condemnation logged' })
+    } catch (e: any) { setToast({ type: 'error', message: e?.message || 'Failed to log condemnation' }) }
   }
 
   return (
+    <>
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-semibold text-slate-800">Equipment</h2>
@@ -773,5 +796,15 @@ export default function Hospital_Equipment(){
         </div>
       )}
     </div>
+    <ConfirmDialog
+      open={!!confirmDeleteId}
+      title="Confirm"
+      message="Delete this equipment?"
+      confirmText="Delete"
+      onCancel={()=>setConfirmDeleteId('')}
+      onConfirm={confirmDelete}
+    />
+    <Toast toast={toast} onClose={()=>setToast(null)} />
+    </>
   )
 }

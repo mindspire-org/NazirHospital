@@ -29,7 +29,7 @@ export type LabSettingsDoc = {
   reportFooter: string
   logoDataUrl?: string
   department?: string
-  reportTemplate?: 'classic'|'tealGradient'|'modern'
+  reportTemplate?: 'classic'|'tealGradient'|'modern'|'adl'|'skmch'
   slipTemplate?: 'thermal'|'a4Bill'
   consultantName?: string
   consultantDegrees?: string

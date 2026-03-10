@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { hospitalApi } from '../../utils/api'
+import Toast, { type ToastState } from '../../components/ui/Toast'
 
 export default function Hospital_EquipmentCondemnationRegister(){
   type Equipment = { id: string; name?: string; code?: string }
@@ -26,6 +27,7 @@ export default function Hospital_EquipmentCondemnationRegister(){
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [q, setQ] = useState('')
+  const [toast, setToast] = useState<ToastState>(null)
 
   useEffect(() => {
     // load equipment list for filter
@@ -43,7 +45,7 @@ export default function Hospital_EquipmentCondemnationRegister(){
       const res = await hospitalApi.listEquipmentCondemnations({ equipmentId: equipmentId || undefined, status: (status as any) || undefined, from: from || undefined, to: to || undefined, page: 1, limit: 1000 }) as any
       setItems(res?.items || [])
     } catch (e: any) {
-      alert(e?.message || 'Failed to load condemnations')
+      setToast({ type: 'error', message: e?.message || 'Failed to load condemnations' })
     } finally { setLoading(false) }
   }
 
@@ -185,6 +187,7 @@ export default function Hospital_EquipmentCondemnationRegister(){
           </div>
         )}
       </div>
+      <Toast toast={toast} onClose={()=>setToast(null)} />
     </div>
   )
 }

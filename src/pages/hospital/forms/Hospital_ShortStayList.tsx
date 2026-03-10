@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { hospitalApi } from '../../../utils/api'
+import ConfirmDialog from '../../../components/ui/ConfirmDialog'
 
 export default function Hospital_ShortStayList(){
   const navigate = useNavigate()
@@ -10,6 +11,7 @@ export default function Hospital_ShortStayList(){
   const [total, setTotal] = useState(0)
   const [rows, setRows] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
   useEffect(()=>{ load() }, [page, limit])
 
@@ -53,8 +55,12 @@ export default function Hospital_ShortStayList(){
   function sr(idx: number){ return (page-1)*limit + idx + 1 }
 
   async function onDelete(encounterId: string){
-    if (!confirm('Delete this form?')) return
-    try { await hospitalApi.deleteIpdShortStay(encounterId) } catch {}
+    setConfirmDeleteId(encounterId)
+  }
+  async function confirmDelete(){
+    if (!confirmDeleteId) return
+    try { await hospitalApi.deleteIpdShortStay(confirmDeleteId) } catch {}
+    setConfirmDeleteId(null)
     load()
   }
 
@@ -117,6 +123,14 @@ export default function Hospital_ShortStayList(){
         <button className="btn-outline-navy" disabled={page<=1} onClick={()=> setPage(p=>Math.max(1,p-1))}>Prev</button>
         <button className="btn-outline-navy" disabled={page>=Math.ceil(total/limit)} onClick={()=> setPage(p=>p+1)}>Next</button>
       </div>
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        title="Confirm Delete"
+        message="Delete this form?"
+        confirmText="Delete"
+        onCancel={()=>setConfirmDeleteId(null)}
+        onConfirm={confirmDelete}
+      />
     </div>
   )
 }

@@ -3,11 +3,11 @@ import * as Tests from '../controllers/tests.controller'
 import * as Settings from '../controllers/settings.controller'
 import * as Orders from '../controllers/orders.controller'
 import * as Results from '../controllers/results.controller'
-import * as Procedures from '../controllers/procedures.controller'
 import * as Users from '../controllers/users.controller'
 import * as Audit from '../controllers/audit.controller'
 import * as Auth from '../controllers/auth.controller'
 import * as Sidebar from '../controllers/sidebarPermission.controller'
+import * as IncomeLedger from '../controllers/income_ledger.controller'
 
 const r = Router()
 
@@ -17,16 +17,9 @@ r.post('/logout', Auth.logout)
 
 // Tests (Catalog for Diagnostics)
 r.get('/tests', Tests.list)
-r.get('/tests/:id', Tests.get)
 r.post('/tests', Tests.create)
 r.put('/tests/:id', Tests.update)
 r.delete('/tests/:id', Tests.remove)
-
-// Procedures
-r.get('/procedures', Procedures.list)
-r.post('/procedures', Procedures.create)
-r.put('/procedures/:id', Procedures.update)
-r.delete('/procedures/:id', Procedures.remove)
 
 // Settings
 r.get('/settings', Settings.get)
@@ -40,6 +33,13 @@ r.put('/orders/:id/track', Orders.updateTrack)
 r.put('/orders/:id/items/:testId/track', Orders.updateItemTrack)
 r.delete('/orders/:id/items/:testId', Orders.removeItem)
 r.delete('/orders/:id', Orders.remove)
+r.post('/orders/:tokenNo/receive-payment', Orders.receivePayment)
+r.post('/orders/:id/return', Orders.returnOrder)
+r.post('/orders/:id/undo-return', Orders.undoReturn)
+
+// Income Ledger
+r.get('/income-ledger', IncomeLedger.listIncomeLedger)
+r.get('/income-ledger/summary', IncomeLedger.getIncomeSummary)
 
 // Results
 r.get('/results', Results.list)

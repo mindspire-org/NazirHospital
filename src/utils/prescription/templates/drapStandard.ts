@@ -78,7 +78,7 @@ export async function buildDrapStandard(data: PrescriptionPdfData){
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(14)
   pdf.setTextColor(239, 68, 68)
-  pdf.text('℞', 12, y)
+  pdf.text('Rx', 12, y)
 
   const rows = (data.items || []).map((it) => [
     String(it.name || ''),

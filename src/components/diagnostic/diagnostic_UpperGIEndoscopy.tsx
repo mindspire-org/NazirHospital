@@ -173,7 +173,7 @@ export async function printUpperGIEndoscopyReport(input: {
   const email = s?.email || ''
   const department = s?.department || 'Department of Diagnostics'
   const logo = s?.logoDataUrl || ''
-  const footer = s?.reportFooter || ''
+  const footer = s?.reportFooter || 'System Generated Report. No Signature Required.'
 
   const esc = (x: any)=> String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')
   const fmt = (iso?: string)=>{ const d = iso? new Date(iso): new Date(); return d.toLocaleDateString()+" "+d.toLocaleTimeString() }
@@ -224,7 +224,7 @@ export async function printUpperGIEndoscopyReport(input: {
     .hdr .muted{color:#64748b;font-size:12px;text-align:center}
     .dept{font-style:italic;text-align:center;margin:8px 0 4px 0}
     .hr{border-bottom:2px solid #0f172a;margin:6px 0}
-    .box{border:0;border-radius:0;padding:0;margin:8px 0}
+    .box{border:1px solid #e2e8f0;border-radius:10px;padding:6px;margin:8px 0}
     .kv{display:grid;grid-template-columns: 130px minmax(0,1fr) 130px minmax(0,1fr) 130px minmax(0,1fr);gap:4px 10px;font-size:12px;align-items:start}
     .kv > div{line-height:1.2}
     .kv > div:nth-child(2n){word-break:break-word}

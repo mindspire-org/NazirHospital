@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { hospitalApi } from '../../../utils/api'
 import Hospital_BirthCertificateForm from '../../../components/hospital/hospital_BirthCertificateForm'
+import ConfirmDialog from '../../../components/ui/ConfirmDialog'
 
 export default function Hospital_BirthCertificateList(){
-  const navigate = useNavigate()
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(20)
@@ -15,6 +14,7 @@ export default function Hospital_BirthCertificateList(){
   const [showModal, setShowModal] = useState(false)
   const [encounterId, setEncounterId] = useState('')
   const [docId, setDocId] = useState<string|undefined>(undefined)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
   useEffect(()=>{ load() }, [page, limit])
 
@@ -65,8 +65,12 @@ export default function Hospital_BirthCertificateList(){
   }
 
   async function onDelete(id: string){
-    if (!confirm('Delete this form?')) return
-    try { await hospitalApi.deleteBirthCertificateById(id) } catch {}
+    setConfirmDeleteId(id)
+  }
+  async function confirmDelete(){
+    if (!confirmDeleteId) return
+    try { await hospitalApi.deleteBirthCertificateById(confirmDeleteId) } catch {}
+    setConfirmDeleteId(null)
     load()
   }
 
@@ -142,6 +146,14 @@ export default function Hospital_BirthCertificateList(){
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        title="Confirm Delete"
+        message="Delete this form?"
+        confirmText="Delete"
+        onCancel={()=>setConfirmDeleteId(null)}
+        onConfirm={confirmDelete}
+      />
     </div>
   )
 }

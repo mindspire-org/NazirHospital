@@ -152,7 +152,7 @@ export async function buildDrapTwoColumn(data: PrescriptionPdfData){
   pdf.setTextColor(blue.r, blue.g, blue.b)
   setPoppins('bold')
   pdf.setFontSize(14)
-  pdf.text('R', rxX + 8, rxY + 18)
+  pdf.text('Rx', rxX + 8, rxY + 18)
 
   // Medicines list inside Rx area (Urdu if provided)
   const startListY = rxY + 24

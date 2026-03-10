@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { logAudit } from '../../utils/hospital_audit'
 import { adminApi } from '../../utils/api'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 const LAST_BACKUP_KEY = 'hospital_last_backup'
 const AUTO_SETTINGS_KEY = 'hospital_backup_settings'
@@ -24,6 +25,7 @@ export default function Hospital_Backup() {
   })
   const [banner, setBanner] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [confirmPurgeOpen, setConfirmPurgeOpen] = useState(false)
 
   const nextBackup = useMemo(() => {
     if (!settings.enabled || !lastBackup) return 'Not scheduled'
@@ -86,7 +88,10 @@ export default function Hospital_Backup() {
   }
 
   const deleteAll = async () => {
-    if (!confirm('Delete ALL data from the database (ALL modules)?')) return
+    setConfirmPurgeOpen(true)
+  }
+  const confirmDeleteAll = async () => {
+    setConfirmPurgeOpen(false)
     try {
       await adminApi.purgeAll()
       setLastBackup(null)
@@ -154,6 +159,14 @@ export default function Hospital_Backup() {
           </div>
         </form>
       </div>
+      <ConfirmDialog
+        open={confirmPurgeOpen}
+        title="Confirm Delete All"
+        message="Delete ALL data from the database (ALL modules)?"
+        confirmText="Delete All"
+        onCancel={()=>setConfirmPurgeOpen(false)}
+        onConfirm={confirmDeleteAll}
+      />
     </div>
   )
 }

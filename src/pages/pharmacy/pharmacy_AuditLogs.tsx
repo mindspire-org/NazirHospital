@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { pharmacyApi } from '../../utils/api'
+import Toast from '../../components/ui/Toast'
 
 type Log = {
   id: string
@@ -43,6 +44,7 @@ export default function Pharmacy_AuditLogs() {
     'Supplier Return',
   ]
   const [loading, setLoading] = useState(false)
+  const [toast, setToast] = useState<{type: 'success'|'error', message: string} | null>(null)
 
   const refresh = async () => {
     setLoading(true)
@@ -161,7 +163,7 @@ export default function Pharmacy_AuditLogs() {
       doc.save(`audit-logs-${date}.pdf`)
     } catch (error) {
       console.error('Error generating PDF:', error)
-      alert('Failed to generate PDF. Please try again.')
+      setToast({ type: 'error', message: 'Failed to generate PDF. Please try again.' })
     } finally {
       setLoading(false)
     }
@@ -230,7 +232,7 @@ export default function Pharmacy_AuditLogs() {
       XLSX.writeFile(wb, `audit-logs-${date}.xlsx`)
     } catch (error) {
       console.error('Error generating Excel:', error)
-      alert('Failed to generate Excel file. Please try again.')
+      setToast({ type: 'error', message: 'Failed to generate Excel file. Please try again.' })
     } finally {
       setLoading(false)
     }
@@ -315,6 +317,7 @@ export default function Pharmacy_AuditLogs() {
           </div>
         </div>
       </div>
+      {toast && <Toast toast={toast} onClose={()=>setToast(null)} />}
     </div>
   )
 }

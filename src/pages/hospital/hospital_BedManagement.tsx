@@ -9,6 +9,7 @@ import Hospital_ManageFloorsModal from '../../components/hospital/bed-management
 import Hospital_ManageBedsModal from '../../components/hospital/bed-management/Hospital_ManageBedsModal'
 import Hospital_AddBedModal from '../../components/hospital/bed-management/Hospital_AddBedModal'
 import { hospitalApi } from '../../utils/api'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 type Floor = { id: string; name: string; number?: string }
 type Room = { id: string; name: string; floorId: string }
@@ -79,6 +80,8 @@ export default function Hospital_BedManagement() {
   const [openManageFloors, setOpenManageFloors] = useState(false)
   const [openManageBeds, setOpenManageBeds] = useState(false)
 
+  const [confirmDelete, setConfirmDelete] = useState<{ kind: 'floor'|'room'|'ward'|'bed'; id: string } | null>(null)
+
   
 
   const saveFloor = async (data: { name: string; number?: string }) => {
@@ -126,18 +129,30 @@ export default function Hospital_BedManagement() {
 
 
   const updateFloor = async (id: string, data: { name?: string; number?: string }) => { await hospitalApi.updateFloor(id, data as any); await loadAll() }
-  const removeFloor = async (id: string) => { if (!confirm('Delete this floor?')) return; await hospitalApi.deleteFloor(id); await loadAll() }
+  const removeFloor = async (id: string) => { setConfirmDelete({ kind: 'floor', id }) }
 
   const updateRoom = async (id: string, data: { name?: string; floorId?: string }) => { await hospitalApi.updateRoom(id, data as any); await loadAll() }
-  const removeRoom = async (id: string) => { if (!confirm('Delete this room?')) return; await hospitalApi.deleteRoom(id); await loadAll() }
+  const removeRoom = async (id: string) => { setConfirmDelete({ kind: 'room', id }) }
 
   const updateWard = async (id: string, data: { name?: string; floorId?: string }) => { await hospitalApi.updateWard(id, data as any); await loadAll() }
-  const removeWard = async (id: string) => { if (!confirm('Delete this ward?')) return; await hospitalApi.deleteWard(id); await loadAll() }
+  const removeWard = async (id: string) => { setConfirmDelete({ kind: 'ward', id }) }
 
   const updateBed = async (id: string, data: { label?: string; charges?: number; category?: string }) => { await hospitalApi.updateBed(id, data as any); await loadAll() }
-  const removeBed = async (id: string) => { if (!confirm('Delete this bed?')) return; await hospitalApi.deleteBed(id); await loadAll() }
+  const removeBed = async (id: string) => { setConfirmDelete({ kind: 'bed', id }) }
+
+  const confirmDeleteNow = async () => {
+    const target = confirmDelete
+    setConfirmDelete(null)
+    if (!target?.id) return
+    if (target.kind === 'floor') await hospitalApi.deleteFloor(target.id)
+    if (target.kind === 'room') await hospitalApi.deleteRoom(target.id)
+    if (target.kind === 'ward') await hospitalApi.deleteWard(target.id)
+    if (target.kind === 'bed') await hospitalApi.deleteBed(target.id)
+    await loadAll()
+  }
 
   return (
+    <>
     <div>
       <div className="rounded-xl border border-slate-200 bg-white p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -188,7 +203,7 @@ export default function Hospital_BedManagement() {
       </div>
 
       {Object.entries(groups).map(([key, group]) => (
-        <div key={key} className="mt-6">
+        <div key={key} className="rounded-xl border border-slate-200 bg-white p-4 mt-4">
           <div className="text-base font-semibold text-slate-800">{group.title}</div>
           <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
             {group.items.map(b => (
@@ -229,5 +244,14 @@ export default function Hospital_BedManagement() {
       <Hospital_AddBedModal open={openAddBed} onClose={() => setOpenAddBed(false)} floors={floors} roomsByFloor={roomsByFloor} wardsByFloor={wardsByFloor} onSave={saveBeds} />
       <Hospital_ManageBedsModal open={openManageBeds} onClose={() => setOpenManageBeds(false)} beds={beds} floorsMap={floorsMap} rooms={rooms} wards={wards} onUpdate={updateBed} onDelete={removeBed} />
     </div>
+    <ConfirmDialog
+      open={!!confirmDelete}
+      title="Confirm"
+      message={confirmDelete?.kind ? `Delete this ${confirmDelete.kind}?` : 'Delete this item?'}
+      confirmText="Delete"
+      onCancel={()=>setConfirmDelete(null)}
+      onConfirm={confirmDeleteNow}
+    />
+    </>
   )
 }

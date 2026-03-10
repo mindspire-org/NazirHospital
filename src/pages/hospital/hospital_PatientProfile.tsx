@@ -11,6 +11,12 @@ import Billing from '../../components/hospital/Hospital_IpdBilling'
 import ConsultantNotes from '../../components/hospital/Hospital_IpdConsultantNotes'
 import Anesthesia from '../../components/hospital/Hospital_IpdAnesthesia'
 import Surgery from '../../components/hospital/Hospital_IpdSurgery'
+import ConsentForm from '../../components/hospital/Hospital_IpdConsentForm'
+import InfectionControlChecklist from '../../components/hospital/Hospital_IpdInfectionControlChecklist'
+import SurgicalSafetyChecklist from '../../components/hospital/Hospital_IpdSurgicalSafetyChecklist'
+import BloodTransfusionNotes from '../../components/hospital/Hospital_IpdBloodTransfusionNotes'
+import OperationConsent from '../../components/hospital/Hospital_IpdOperationConsent'
+import HistoryExamination from '../../components/hospital/Hospital_IpdHistoryExamination'
 
  
 
@@ -28,7 +34,24 @@ export default function Hospital_PatientProfile() {
   const backSnapshot = (location as any)?.state?.searchSnapshot
   const [encounter, setEncounter] = useState<any | null>(null)
 
-  const [tab, setTab] = useState<'vitals'|'progress'|'surgery'|'consult'|'anesthesia'|'meds'|'lab'|'diagnostic'|'visits'|'billing'>('vitals')
+  const [tab, setTab] = useState<
+    | 'vitals'
+    | 'progress'
+    | 'surgery'
+    | 'consult'
+    | 'anesthesia'
+    | 'meds'
+    | 'lab'
+    | 'diagnostic'
+    | 'visits'
+    | 'billing'
+    | 'history'
+    | 'consent'
+    | 'infection'
+    | 'surgical'
+    | 'transfusion'
+    | 'opconsent'
+  >('vitals')
 
   // child components handle their own state
 
@@ -73,6 +96,12 @@ export default function Hospital_PatientProfile() {
           <Tab label="Consultant Notes" active={tab==='consult'} onClick={()=>setTab('consult')} />
           <Tab label="Anesthesia" active={tab==='anesthesia'} onClick={()=>setTab('anesthesia')} />
           <Tab label="Medication" active={tab==='meds'} onClick={()=>setTab('meds')} />
+          <Tab label="History & Examination" active={tab==='history'} onClick={()=>setTab('history')} />
+          <Tab label="Consent Form" active={tab==='consent'} onClick={()=>setTab('consent')} />
+          <Tab label="Infection Control" active={tab==='infection'} onClick={()=>setTab('infection')} />
+          <Tab label="Surgical Safety" active={tab==='surgical'} onClick={()=>setTab('surgical')} />
+          <Tab label="Blood Transfusion" active={tab==='transfusion'} onClick={()=>setTab('transfusion')} />
+          <Tab label="Operation Consent" active={tab==='opconsent'} onClick={()=>setTab('opconsent')} />
           <Tab label="Lab Tests" active={tab==='lab'} onClick={()=>setTab('lab')} />
           <Tab label="Diagnostic Tests" active={tab==='diagnostic'} onClick={()=>setTab('diagnostic')} />
           <Tab label="Doctor Visits" active={tab==='visits'} onClick={()=>setTab('visits')} />
@@ -87,6 +116,12 @@ export default function Hospital_PatientProfile() {
       {tab==='consult' && (<ConsultantNotes encounterId={encounterId} />)}
       {tab==='anesthesia' && (<Anesthesia encounterId={encounterId} />)}
       {tab==='meds' && (<Medication encounterId={encounterId} />)}
+      {tab==='history' && (<HistoryExamination encounterId={encounterId} />)}
+      {tab==='consent' && (<ConsentForm encounterId={encounterId} />)}
+      {tab==='infection' && (<InfectionControlChecklist encounterId={encounterId} />)}
+      {tab==='surgical' && (<SurgicalSafetyChecklist encounterId={encounterId} />)}
+      {tab==='transfusion' && (<BloodTransfusionNotes encounterId={encounterId} />)}
+      {tab==='opconsent' && (<OperationConsent encounterId={encounterId} />)}
       {tab==='lab' && (<LabTests encounterId={encounterId} />)}
       {tab==='diagnostic' && (<DiagnosticTests encounterId={encounterId} />)}
       {tab==='visits' && (<DoctorVisits encounterId={encounterId} />)}

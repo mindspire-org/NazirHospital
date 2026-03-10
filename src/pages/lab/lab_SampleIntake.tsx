@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { X, Search, ChevronDown } from 'lucide-react'
 import { labApi, hospitalApi, corporateApi } from '../../utils/api'
 import { printLabTokenSlip } from '../../utils/printLabToken'
+import Toast, { type ToastState } from '../../components/ui/Toast'
 
 type LabTest = { id: string; name: string; price: number }
 
@@ -52,13 +53,8 @@ export default function Lab_Orders() {
   const [query, setQuery] = useState('')
   const [openList, setOpenList] = useState(false)
   const [selectedTestIds, setSelectedTestIds] = useState<string[]>([])
- 
-
-  
-
-  
-
   const [discount, setDiscount] = useState('0')
+  const [receivedAmount, setReceivedAmount] = useState('0')
   // Corporate billing fields
   const [companies, setCompanies] = useState<Array<{ id: string; name: string }>>([])
   const [corpCompanyId, setCorpCompanyId] = useState('')
@@ -69,6 +65,7 @@ export default function Lab_Orders() {
   const [corpTestPriceMap, setCorpTestPriceMap] = useState<Record<string, number>>({})
   const [confirmPatient, setConfirmPatient] = useState<null | { summary: string; patient: any; key: string }>(null)
   const [focusAfterConfirm, setFocusAfterConfirm] = useState<null | 'phone' | 'name'>(null)
+  const [toast, setToast] = useState<ToastState>(null)
   const phoneRef = useRef<HTMLInputElement>(null)
   const nameRef = useRef<HTMLInputElement>(null)
   const skipLookupKeyRef = useRef<string | null>(null)
@@ -105,7 +102,7 @@ export default function Lab_Orders() {
       closePatientPick()
       await submitWithResolvedPatient(resolved)
     } catch (e: any) {
-      alert(e?.message || 'Failed to select patient')
+      setToast({ type: 'error', message: e?.message || 'Failed to select patient' })
     }
   }
 
@@ -116,7 +113,7 @@ export default function Lab_Orders() {
       closePatientPick()
       await submitWithResolvedPatient(resolved)
     } catch (e: any) {
-      alert(e?.message || 'Failed to create patient')
+      setToast({ type: 'error', message: e?.message || 'Failed to create patient' })
     }
   }
 
@@ -292,6 +289,8 @@ export default function Lab_Orders() {
   const subtotal = useMemo(() => selectedTests.reduce((s, t) => s + getEffectivePrice(t.id), 0), [selectedTests, corpCompanyId, corpTestPriceMap])
   const discountNum = Number(discount) || 0
   const net = Math.max(0, subtotal - discountNum)
+  const receivedNum = Math.max(0, Math.min(net, Number(receivedAmount) || 0))
+  const receivableNum = Math.max(0, net - receivedNum)
 
   // Load corporate companies once
   useEffect(()=>{
@@ -310,6 +309,7 @@ export default function Lab_Orders() {
   const addTest = (id: string) => {
     setSelectedTestIds(prev => [...prev, id])
     setQuery('')
+    setOpenList(false)
   }
   const removeTest = (id: string) => setSelectedTestIds(prev => prev.filter(x => x !== id))
 
@@ -370,7 +370,7 @@ export default function Lab_Orders() {
 
       const skipKey = `${phone.trim()}|${fullName.trim()}`
       if (patientPickSkipKey && patientPickSkipKey === skipKey) {
-        alert('Please select an existing patient from the list, or change phone/name to create a new patient.')
+        setToast({ type: 'error', message: 'Please select an existing patient from the list, or change phone/name to create a new patient.' })
         return
       }
 
@@ -389,14 +389,14 @@ export default function Lab_Orders() {
       }
       patient = resp?.patient || null
     } catch (e: any) {
-      alert(e?.message || 'Failed to find/create patient')
+      setToast({ type: 'error', message: e?.message || 'Failed to find/create patient' })
       return
     }
     await submitWithResolvedPatient(patient)
   }
 
   async function submitWithResolvedPatient(patient: any) {
-    if (!patient){ alert('Patient not resolved'); return }
+    if (!patient){ setToast({ type: 'error', message: 'Patient not resolved' }); return }
     // update MR number display
     try { setMrNumber(String(patient.mrn||'')) } catch {}
     // populate gender from patient record if available
@@ -427,6 +427,8 @@ export default function Lab_Orders() {
         subtotal: getPrice(firstId),
         discount: discountNum,
         net: Math.max(0, getPrice(firstId) - discountNum),
+        receivedAmount: receivedNum,
+        paymentMethod: 'cash',
         referringConsultant: referring.trim() || undefined,
       }
       if (corpCompanyId){
@@ -555,6 +557,8 @@ export default function Lab_Orders() {
         subtotal,
         discount: discountNum,
         net,
+        receivedAmount: receivedNum,
+        receivableAmount: receivableNum,
         printedBy,
         fbr: sharedFbr as any,
       })
@@ -572,6 +576,7 @@ export default function Lab_Orders() {
       setOpenList(false)
       setSelectedTestIds([])
       setDiscount('0')
+      setReceivedAmount('0')
       setCorpCompanyId('')
       setCorpPreAuthNo('')
       setCorpCoPayPercent('')
@@ -587,7 +592,7 @@ export default function Lab_Orders() {
       skipLookupKeyRef.current = null
       lastPromptKeyRef.current = null
       navigate('/lab/orders')
-    } catch (e){ console.error(e); alert('Failed to create order(s)') }
+    } catch (e){ console.error(e); setToast({ type: 'error', message: 'Failed to create order(s)' }) }
   }
 
   // Lookup existing patient only when both phone and name are present
@@ -871,6 +876,14 @@ export default function Lab_Orders() {
             <div>Net Amount</div>
             <div>{formatPKR(net)}</div>
           </div>
+          <div className="flex items-center justify-between py-2">
+            <div className="text-slate-600">Received</div>
+            <input value={receivedAmount} onChange={e=>setReceivedAmount(e.target.value)} className="w-40 rounded-md border border-slate-300 px-3 py-1.5 text-right" placeholder="0" />
+          </div>
+          <div className="flex items-center justify-between py-2 font-semibold">
+            <div>Receivable</div>
+            <div>{formatPKR(receivableNum)}</div>
+          </div>
         </div>
         <div className="mt-4 flex items-center justify-end gap-2">
           <button onClick={()=>navigate(-1)} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">Back</button>
@@ -904,6 +917,7 @@ export default function Lab_Orders() {
           </div>
         </div>
       )}
+      <Toast toast={toast} onClose={()=>setToast(null)} />
     </div>
   )
 }

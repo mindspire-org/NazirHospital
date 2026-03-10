@@ -48,7 +48,11 @@ export async function create(req: Request, res: Response){
         }
       } catch {}
     }
-    const tags: any = { departmentId: (row as any)?.departmentId ? String((row as any)?.departmentId) : undefined }
+    const tags: any = {
+      departmentId: (row as any)?.departmentId ? String((row as any)?.departmentId) : undefined,
+      createdByUserId: (req as any).user?._id || (req as any).user?.id || undefined,
+      createdByUsername: (req as any).user?.username || undefined,
+    }
     if (sessionId) tags.sessionId = sessionId
     const creditAccount = isCash ? 'CASH' : 'BANK'
     const lines = [
@@ -58,6 +62,14 @@ export async function create(req: Request, res: Response){
     await FinanceJournal.create({ dateIso, refType: 'expense', refId: String((row as any)?._id || ''), memo: (row as any)?.note || (data as any)?.note || 'Expense', lines })
   } catch {}
   res.status(201).json({ expense: row })
+}
+
+export async function update(req: Request, res: Response){
+  const id = req.params.id
+  const data = createExpenseSchema.partial().parse(req.body)
+  const row = await HospitalExpense.findByIdAndUpdate(id, data, { new: true })
+  if (!row) return res.status(404).json({ error: 'Expense not found' })
+  res.json({ expense: row })
 }
 
 export async function remove(req: Request, res: Response){

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { labApi } from '../../utils/api'
 
-type User = { _id: string; username: string; role: string }
+type Shift = { _id: string; name: string; start: string; end: string }
+type User = { _id: string; username: string; role: string; shiftId?: string; shiftRestricted?: boolean }
 
 export default function Lab_UserManagement() {
   const [users, setUsers] = useState<User[]>([])
@@ -12,12 +13,13 @@ export default function Lab_UserManagement() {
   const [newRole, setNewRole] = useState<string>('')
   const [newPassword, setNewPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [editing, setEditing] = useState<{ _id: string; username: string; role: string } | null>(null)
+  const [editing, setEditing] = useState<{ _id: string; username: string; role: string; shiftId?: string; shiftRestricted?: boolean } | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
   
   const [notice, setNotice] = useState<{ text: string; kind: 'success'|'error' } | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [shifts, setShifts] = useState<Shift[]>([])
   const [addUserError, setAddUserError] = useState('')
 
   useEffect(() => {
@@ -25,9 +27,10 @@ export default function Lab_UserManagement() {
     ;(async () => {
       setLoading(true)
       try {
-        const [rolesRes, usersRes] = await Promise.allSettled([
+        const [rolesRes, usersRes, shiftsRes] = await Promise.allSettled([
           labApi.listSidebarRoles() as any,
           labApi.listUsers() as any,
+          labApi.listShifts?.() as any,
         ])
         if (!mounted) return
         if (rolesRes.status === 'fulfilled'){
@@ -39,8 +42,12 @@ export default function Lab_UserManagement() {
         }
         if (usersRes.status === 'fulfilled'){
           const arr = (usersRes.value?.items || usersRes.value || []) as any[]
-          const list: User[] = arr.map((u: any) => ({ _id: String(u._id), username: u.username, role: u.role }))
+          const list: User[] = arr.map((u: any) => ({ _id: String(u._id), username: u.username, role: u.role, shiftId: u.shiftId ? String(u.shiftId) : undefined, shiftRestricted: !!u.shiftRestricted }))
           setUsers(list)
+        }
+        if (shiftsRes.status === 'fulfilled'){
+          const list = (shiftsRes.value?.items || []) as any[]
+          setShifts(list.map((s: any) => ({ _id: String(s._id || s.id), name: s.name, start: s.start, end: s.end })))
         }
       } catch (e) { console.error(e); if (mounted){ setUsers([]) } }
       finally { if (mounted) setLoading(false) }
@@ -81,13 +88,16 @@ export default function Lab_UserManagement() {
     finally { setDeleteOpen(false); setDeleteId(null); try { setTimeout(()=> setNotice(null), 2500) } catch {} }
   }
 
-  const openEdit = (u: User) => setEditing({ _id: u._id, username: u.username, role: u.role })
+  const openEdit = (u: User) => setEditing({ _id: u._id, username: u.username, role: u.role, shiftId: u.shiftId, shiftRestricted: u.shiftRestricted })
   const saveEdit = async () => {
     if (!editing) return
     setSavingEdit(true)
     try {
-      const updated = await labApi.updateUser(editing._id, { username: editing.username, role: editing.role }) as any
-      setUsers(prev => prev.map(u => (u._id === editing._id ? ({ ...u, username: updated?.username ?? editing.username, role: updated?.role ?? editing.role }) : u)))
+      const payload: any = { username: editing.username, role: editing.role }
+      if (editing.shiftId !== undefined) payload.shiftId = editing.shiftId || null
+      if (editing.shiftRestricted !== undefined) payload.shiftRestricted = editing.shiftRestricted
+      const updated = await labApi.updateUser(editing._id, payload) as any
+      setUsers(prev => prev.map(u => (u._id === editing._id ? ({ ...u, username: updated?.username ?? editing.username, role: updated?.role ?? editing.role, shiftId: updated?.shiftId ?? editing.shiftId, shiftRestricted: updated?.shiftRestricted ?? editing.shiftRestricted }) : u)))
       setEditing(null)
     } catch (e) { console.error(e) }
     finally { setSavingEdit(false) }
@@ -138,6 +148,7 @@ export default function Lab_UserManagement() {
                     <tr>
                       <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide">User</th>
                       <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide">Role</th>
+                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide">Shift</th>
                       <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide">Actions</th>
                     </tr>
                   </thead>
@@ -157,6 +168,19 @@ export default function Lab_UserManagement() {
                         </td>
                         <td className="px-5 py-3"><span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold capitalize text-slate-700">{u.role}</span></td>
                         <td className="px-5 py-3">
+                          {(() => {
+                            const s = shifts.find(x => x._id === u.shiftId)
+                            if (!s) return <span className="text-xs text-slate-400">-</span>
+                            return (
+                              <div className="text-xs">
+                                <div className="font-medium text-slate-700">{s.name}</div>
+                                <div className="text-slate-500">{s.start} → {s.end}</div>
+                                {u.shiftRestricted && <span className="text-[10px] text-amber-600">Restricted</span>}
+                              </div>
+                            )
+                          })()}
+                        </td>
+                        <td className="px-5 py-3">
                           <div className="flex flex-wrap gap-2">
                             <button onClick={()=>openEdit(u)} className="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-700">Edit</button>
                             <button onClick={()=>requestDelete(u._id)} className="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700">Delete</button>
@@ -165,7 +189,7 @@ export default function Lab_UserManagement() {
                       </tr>
                     ))}
                     {users.length===0 && !loading && (
-                      <tr><td className="px-5 py-8 text-center text-slate-500" colSpan={3}>No users yet.</td></tr>
+                      <tr><td className="px-5 py-8 text-center text-slate-500" colSpan={4}>No users yet.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -213,6 +237,27 @@ export default function Lab_UserManagement() {
                 <select value={editing.role} onChange={e=>setEditing(prev=> prev? { ...prev, role: e.target.value } : prev)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
                   {(roles||[]).map(r=> <option key={r} value={r}>{r}</option>)}
                 </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Shift</label>
+                <select 
+                  value={editing.shiftId || ''} 
+                  onChange={e=>setEditing(prev=> prev? { ...prev, shiftId: e.target.value || undefined } : prev)} 
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="">None</option>
+                  {(shifts||[]).map(s=> <option key={s._id} value={s._id}>{s.name} ({s.start} - {s.end})</option>)}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <input 
+                  type="checkbox" 
+                  id="shiftRestricted"
+                  checked={!!editing.shiftRestricted} 
+                  onChange={e=>setEditing(prev=> prev? { ...prev, shiftRestricted: e.target.checked } : prev)} 
+                  className="rounded border-slate-300"
+                />
+                <label htmlFor="shiftRestricted" className="text-sm text-slate-700">Restrict login to shift timing only</label>
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-3">

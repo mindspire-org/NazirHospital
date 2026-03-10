@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { hospitalApi } from '../../utils/api'
+import Toast, { type ToastState } from '../../components/ui/Toast'
 
 type Attendance = { id?: string; staffId: string; date: string; shiftId?: string; status: 'present'|'absent'|'leave'; clockIn?: string; clockOut?: string; notes?: string }
 type Staff = { id: string; name: string; position?: string; phone?: string; shiftId?: string }
@@ -23,6 +24,7 @@ export default function Hospital_StaffAttendance(){
   const [staff, setStaff] = useState<Staff[]>([])
   const [shifts, setShifts] = useState<Shift[]>([])
   const [att, setAtt] = useState<Attendance[]>([])
+  const [toast, setToast] = useState<ToastState>(null)
 
   useEffect(() => {
     let mounted = true
@@ -144,7 +146,7 @@ export default function Hospital_StaffAttendance(){
       const res = await hospitalApi.listAttendance({ date, shiftId: shiftId || undefined, page: 1, limit: 500 })
       setAtt((res.items||[]).map((x:any)=>({ id: x._id || `${x.staffId}-${x.date}-${x.shiftId||''}`, staffId: x.staffId, date: x.date, shiftId: x.shiftId, status: x.status, clockIn: x.clockIn, clockOut: x.clockOut, notes: x.notes })))
     } catch (e: any) {
-      alert(e?.message || 'Failed to fetch from machine')
+      setToast({ type: 'error', message: e?.message || 'Failed to fetch from machine' })
     } finally {
       setSyncing(false)
     }
@@ -252,6 +254,7 @@ export default function Hospital_StaffAttendance(){
           </div>
         </div>
       </div>
+      <Toast toast={toast} onClose={()=>setToast(null)} />
     </div>
   )
 }

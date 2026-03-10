@@ -17,7 +17,6 @@ export type DiagnosticTokenSlipData = {
   discount: number
   payable: number
   createdAt?: string
-  fbr?: { status?: string; qrCode?: string; fbrInvoiceNo?: string; mode?: string; error?: string }
 }
 
 function getCurrentUser(){
@@ -41,7 +40,7 @@ export default function Diagnostic_TokenSlip({ open, onClose, data, autoPrint = 
           phone: s?.phone || '',
           address: s?.address || '',
           logoDataUrl: s?.logoDataUrl || '',
-          slipFooter: s?.slipFooter || s?.reportFooter || 'Powered by Hospital MIS',
+          slipFooter: s?.reportFooter || 'Powered by Hospital MIS',
         })
       } catch {}
     })()
@@ -51,14 +50,9 @@ export default function Diagnostic_TokenSlip({ open, onClose, data, autoPrint = 
   if (!open) return null
   const dt = data.createdAt ? new Date(data.createdAt) : new Date()
 
-  const fbrStatus = String(data?.fbr?.status || '').toUpperCase().trim()
-  const isFbrSuccess = fbrStatus === 'SUCCESS' && Boolean(data?.fbr?.qrCode)
-  const isFbrDisabled = !data?.fbr || !fbrStatus
-  const showFbrSection = !isFbrDisabled
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4 print:bg-white print:static">
-      <div id="diagnostic-receipt" className="w-full max-w-[384px] max-h-[90vh] overflow-y-auto rounded-md border border-slate-300 bg-white p-4 shadow sm:max-h-[92vh] print:shadow-none print:border-0 print:w-[300px]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 print:bg-white print:static">
+      <div id="diagnostic-receipt" className="w-[384px] rounded-md border border-slate-300 bg-white p-4 shadow print:shadow-none print:border-0 print:w-[300px]">
         <div className="text-center">
           {settings.logoDataUrl && <img src={settings.logoDataUrl} alt="logo" className="mx-auto mb-2 h-10 w-10 object-contain" />}
           <div className="text-lg font-extrabold leading-tight">{settings.name}</div>
@@ -104,26 +98,6 @@ export default function Diagnostic_TokenSlip({ open, onClose, data, autoPrint = 
           <Row label="Discount:" value={`PKR ${Number(data.discount||0).toLocaleString()}`} />
           <Row label="Payable Amount:" value={`PKR ${data.payable.toLocaleString()}`} boldValue />
         </div>
-
-        {showFbrSection ? (
-          <>
-            <hr className="my-2 border-dashed" />
-
-            <div className="text-center text-sm font-semibold underline">FBR</div>
-            <div className="mt-2 text-center">
-              {isFbrSuccess ? (
-                <img src={data.fbr!.qrCode} alt="FBR QR" className="mx-auto h-24 w-24 object-contain" />
-              ) : (
-                <div className="text-sm font-semibold text-rose-600 print:text-black">FBR FAILED</div>
-              )}
-            </div>
-            <div className="mt-1 space-y-0.5 text-[11px] text-slate-700 print:text-black">
-              <div>FBR No: {data?.fbr?.fbrInvoiceNo || '—'}</div>
-              <div>Mode: {data?.fbr?.mode || '—'}</div>
-              <div>Error: {data?.fbr?.error || '—'}</div>
-            </div>
-          </>
-        ) : null}
 
         <hr className="my-2 border-dashed" />
         <div className="text-center text-[11px] text-slate-600 print:text-black">{settings.slipFooter}</div>

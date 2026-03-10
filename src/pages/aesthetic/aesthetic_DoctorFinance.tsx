@@ -4,6 +4,7 @@ import Aesthetic_DoctorFinanceEntryDialog from '../../components/aesthetic/aesth
 import { aestheticFinanceApi as financeApi, aestheticApi } from '../../utils/api'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 const DOCTORS_KEY = 'aesthetic_doctors'
 const FINANCE_KEY = 'aesthetic.doctor_finance'
@@ -86,6 +87,7 @@ export default function Hospital_DoctorFinance() {
   const [rowsPerPage, setRowsPerPage] = useState(50)
   const [tick, setTick] = useState(0)
   const [balance, setBalance] = useState<number | null>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
   useEffect(() => {
     setDoctors(readDoctors())
@@ -425,6 +427,15 @@ export default function Hospital_DoctorFinance() {
       )}
 
       <div className="text-xs text-slate-500">Manage doctors in <Link to="/aesthetic/doctor-management" className="text-sky-700 hover:underline">Aesthetic → Doctors</Link></div>
+
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        title="Confirm Delete"
+        message="Delete this entry?"
+        confirmText="Delete"
+        onCancel={()=>setConfirmDeleteId(null)}
+        onConfirm={confirmDelete}
+      />
     </div>
   )
 
@@ -434,7 +445,12 @@ export default function Hospital_DoctorFinance() {
   }
 
   async function deleteEntry(id: string) {
-    if (!confirm('Delete this entry?')) return
+    setConfirmDeleteId(id)
+  }
+  async function confirmDelete(){
+    const id = confirmDeleteId
+    setConfirmDeleteId(null)
+    if (!id) return
     // If it's a backend-sourced journal, reverse it server-side
     if (id.startsWith('be:')){
       const realId = id.slice(3)

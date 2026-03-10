@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { aestheticApi } from '../../utils/api'
+import Toast, { type ToastState } from '../../components/ui/Toast'
 
 export default function Pharmacy_Settings() {
   const [activeTab, setActiveTab] = useState<'pharmacy' | 'system'>('pharmacy')
@@ -17,6 +18,7 @@ export default function Pharmacy_Settings() {
   const [discountRate, setDiscountRate] = useState<number>(0)
   const [currency, setCurrency] = useState<string>('PKR')
   const [dateFormat, setDateFormat] = useState<string>('DD/MM/YYYY')
+  const [toast, setToast] = useState<ToastState>(null)
 
   useEffect(() => {
     let mounted = true
@@ -38,14 +40,18 @@ export default function Pharmacy_Settings() {
   }, [])
 
   const savePharmacy = async () => {
-    await aestheticApi.updateSettings({ pharmacyName, phone, address, email, billingFooter, logoDataUrl: logoDataUrl || '' })
-    alert('Pharmacy settings saved')
+    try {
+      await aestheticApi.updateSettings({ pharmacyName, phone, address, email, billingFooter, logoDataUrl: logoDataUrl || '' })
+      setToast({ type: 'success', message: 'Pharmacy settings saved' })
+    } catch (e: any){
+      setToast({ type: 'error', message: e?.message || 'Failed to save settings' })
+    }
   }
 
   const saveSystem = () => {
     // TODO: integrate API later
     console.log({ taxRate, discountRate, currency, dateFormat })
-    alert('System settings saved (demo)')
+    setToast({ type: 'success', message: 'System settings saved (demo)' })
   }
 
   return (
@@ -155,6 +161,8 @@ export default function Pharmacy_Settings() {
           </div>
         </div>
       )}
+
+      <Toast toast={toast} onClose={()=>setToast(null)} />
     </div>
   )
 }

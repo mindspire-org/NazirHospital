@@ -106,11 +106,11 @@ export async function buildEuropeanStandard(data: PrescriptionPdfData){
     currentY += 15
   }
 
-  // Prescription section with European formatting
+  // Prescription section with European 
   pdf.setTextColor(220, 50, 50)
   setPoppins('bold')
   pdf.setFontSize(14)
-  pdf.text('℞', 12, currentY)
+  pdf.text('Rx', 12, currentY)
 
   // Medicine table (European style)
   const items = Array.isArray(data.items) ? data.items : []

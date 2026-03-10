@@ -2,14 +2,67 @@ import { labApi } from './api'
 
 export type ReportRow = { test: string; normal?: string; unit?: string; value?: string; prevValue?: string; flag?: 'normal'|'abnormal'|'critical'; comment?: string }
 
+async function makeBarcodeDataUrl(value: string): Promise<string> {
+  try {
+    const mod: any = await import('jsbarcode')
+    const JsBarcode = mod?.default || mod
+    const canvas = document.createElement('canvas')
+    JsBarcode(canvas, value, { format: 'CODE128', displayValue: false, margin: 0, height: 42 })
+    return canvas.toDataURL('image/png')
+  } catch {
+    return ''
+  }
+}
+
+function pickReportColumns(rows: ReportRow[]) {
+  const nonEmptyRows = (rows || []).filter((r) =>
+    (r.value || '').trim().length > 0 ||
+    (r.normal || '').trim().length > 0 ||
+    (r.unit || '').trim().length > 0 ||
+    (r.prevValue || '').trim().length > 0 ||
+    (r.flag || '').trim().length > 0 ||
+    (r.comment || '').trim().length > 0
+  )
+
+  const hasNormal = nonEmptyRows.some((r) => (r.normal || '').trim().length > 0)
+  const hasUnit = nonEmptyRows.some((r) => (r.unit || '').trim().length > 0)
+  const hasPrev = nonEmptyRows.some((r) => (r.prevValue || '').trim().length > 0)
+  const hasFlag = nonEmptyRows.some((r) => (r.flag || '').trim().length > 0)
+  const hasComment = nonEmptyRows.some((r) => (r.comment || '').trim().length > 0)
+
+  const head = [
+    ['Test', ...(hasNormal ? ['Normal Value'] : []), ...(hasUnit ? ['Unit'] : []), ...(hasPrev ? ['Previous'] : []), 'Result', ...(hasFlag ? ['Flag'] : []), ...(hasComment ? ['Comment'] : [])],
+  ]
+  const body = nonEmptyRows.map((r) => [
+    r.test || '',
+    ...(hasNormal ? [r.normal || ''] : []),
+    ...(hasUnit ? [r.unit || ''] : []),
+    ...(hasPrev ? [r.prevValue || ''] : []),
+    r.value || '',
+    ...(hasFlag ? [r.flag || ''] : []),
+    ...(hasComment ? [r.comment || ''] : []),
+  ])
+
+  let idx = 1
+  if (hasNormal) idx++
+  if (hasUnit) idx++
+  const idxPrev = hasPrev ? idx++ : -1
+  const idxFlag = hasFlag ? idx + 1 : -1
+
+  return { head, body, idxPrev, idxFlag, nonEmptyRows, hasNormal, hasUnit, hasPrev, hasFlag, hasComment }
+}
+
 export async function downloadLabReportPdf(input: {
   tokenNo: string
+  barcode?: string
   createdAt: string
   sampleTime?: string
   reportingTime?: string
   patient: { fullName: string; phone?: string; mrn?: string; age?: string; gender?: string; address?: string }
   rows: ReportRow[]
   interpretation?: string
+  submittedBy?: string
+  approvedBy?: string
   printedBy?: string
   referringConsultant?: string
   profileLabel?: string
@@ -24,6 +77,14 @@ export async function downloadLabReportPdf(input: {
     if ((s?.reportTemplate || 'classic') === 'tealGradient'){
       const mod = await import('./labReport/templates/tealHeader')
       return mod.downloadLabReportPdfGradient(input)
+    }
+    if ((s?.reportTemplate || 'classic') === 'adl'){
+      const mod = await import('./labReport/templates/adl')
+      return mod.downloadLabReportPdfAdl(input as any)
+    }
+    if ((s?.reportTemplate || 'classic') === 'skmch'){
+      const mod = await import('./labReport/templates/skmch')
+      return mod.downloadLabReportPdfSkmch(input as any)
     }
   } catch {}
   const labName = s?.labName || 'Laboratory'
@@ -53,11 +114,33 @@ export async function downloadLabReportPdf(input: {
       doc.addImage(normalized, 'PNG' as any, 40, y - 32, 70, 70, undefined, 'FAST')
     } catch {}
   }
+  doc.setFont('helvetica','bold')
   doc.setFontSize(16)
   doc.text(String(labName), 297.5, y, { align: 'center' }); y += 16
+  doc.setFont('helvetica','bold')
   doc.setFontSize(10)
   doc.text(String(address), 297.5, y, { align: 'center' }); y += 12
   doc.text(`Ph: ${phone || ''}${email? ' • '+email : ''}`, 297.5, y, { align: 'center' }); y += 16
+
+  if ((input.barcode || '').trim()) {
+    try {
+      const b = String(input.barcode || '').trim()
+      const png = await makeBarcodeDataUrl(b)
+      if (png) {
+        const bw = 220
+        const bh = 34
+        const bx = (595 - bw) / 2
+        doc.addImage(png, 'PNG' as any, bx, y - 6, bw, bh, undefined, 'FAST')
+        doc.setFont('helvetica','normal')
+        doc.setFontSize(9)
+        doc.text(b, 297.5, y + bh + 6, { align: 'center' })
+        doc.setFontSize(10)
+        y += bh + 18
+      }
+    } catch {}
+  }
+
+  doc.setFont('helvetica','normal')
   doc.setDrawColor(15); doc.line(40, y, 555, y); y += 10
   doc.setFontSize(11)
   doc.text(String(department), 297.5, y, { align: 'center' }); y += 16
@@ -84,15 +167,7 @@ export async function downloadLabReportPdf(input: {
   drawKV('Address :', String(input.patient.address || '-'), L, y); y += 8
 
   // Table
-  const hasPrev = (input.rows||[]).some(r => (r.prevValue || '').trim().length > 0)
-  const hasFlag = (input.rows||[]).some(r => (r.flag || '').length > 0)
-  const hasComment = (input.rows||[]).some(r => (r.comment || '').trim().length > 0)
-  const head = [
-    ['Test','Normal Value','Unit', ...(hasPrev? ['Previous'] : []), 'Result', ...(hasFlag? ['Flag'] : []), ...(hasComment? ['Comment'] : [])]
-  ]
-  const body = (input.rows||[]).map(r => [
-    r.test||'', r.normal||'', r.unit||'', ...(hasPrev? [r.prevValue||''] : []), r.value||'', ...(hasFlag? [r.flag||''] : []), ...(hasComment? [r.comment||''] : [])
-  ])
+  const { head, body, idxPrev, idxFlag } = pickReportColumns(input.rows || [])
   const drawFooter = () => {
     const pageHeight = (doc.internal.pageSize as any).getHeight ? (doc.internal.pageSize as any).getHeight() : (doc.internal.pageSize as any).height
     let baseY = pageHeight - 90
@@ -108,17 +183,17 @@ export async function downloadLabReportPdf(input: {
         const x = 40 + i * colW + 4
         let yy = baseY + 26
         doc.setFontSize(11)
+        doc.setFont('helvetica', 'bold')
         if ((c.name||'').trim()) { doc.text(String(c.name), x, yy); yy += 12 }
         doc.setFontSize(10)
         if ((c.degrees||'').trim()) { doc.text(String(c.degrees), x, yy); yy += 12 }
-        if ((c.title||'').trim()) { doc.setFont('helvetica', 'bold'); doc.text(String(c.title), x, yy); doc.setFont('helvetica', 'normal'); }
+        if ((c.title||'').trim()) { doc.text(String(c.title), x, yy) }
+        doc.setFont('helvetica', 'normal')
       })
     }
   }
 
   const columnStyles: Record<number, any> = {}
-  const idxPrev = hasPrev ? 3 : -1
-  const idxFlag = hasFlag ? (hasPrev ? 5 : 4) : -1
   if (idxPrev >= 0) columnStyles[idxPrev] = { fontStyle: 'bold' }
   if (idxFlag >= 0) columnStyles[idxFlag] = { fontStyle: 'bold' }
 
@@ -142,11 +217,17 @@ export async function downloadLabReportPdf(input: {
 
   const hasInterpretation = (input.interpretation || '').trim().length > 0
   if (hasInterpretation) {
+    const bullets = String(input.interpretation || '')
+      .split(/\r?\n/)
+      .map(s => s.trim())
+      .filter(Boolean)
+      .map(s => `• ${s}`)
+      .join('\n')
     autoTable(doc, {
       startY: (((doc as any).lastAutoTable?.finalY) || (y + 12)) + 12,
       body: [
         [{ content: 'Clinical Interpretation:', styles: { fontStyle: 'bold' } }],
-        [{ content: String(input.interpretation || '') }],
+        [{ content: bullets || String(input.interpretation || '') }],
       ],
       theme: 'plain',
       styles: { fontSize: 10, cellPadding: 0, halign: 'left' },
@@ -163,12 +244,15 @@ export async function downloadLabReportPdf(input: {
 
 export async function previewLabReportPdf(input: {
   tokenNo: string
+  barcode?: string
   createdAt: string
   sampleTime?: string
   reportingTime?: string
   patient: { fullName: string; phone?: string; mrn?: string; age?: string; gender?: string; address?: string }
   rows: ReportRow[]
   interpretation?: string
+  submittedBy?: string
+  approvedBy?: string
   printedBy?: string
   referringConsultant?: string
   profileLabel?: string
@@ -183,6 +267,14 @@ export async function previewLabReportPdf(input: {
     if ((s?.reportTemplate || 'classic') === 'tealGradient'){
       const mod = await import('./labReport/templates/tealHeader')
       return mod.previewLabReportPdfGradient(input)
+    }
+    if ((s?.reportTemplate || 'classic') === 'adl'){
+      const mod = await import('./labReport/templates/adl')
+      return mod.previewLabReportPdfAdl(input as any)
+    }
+    if ((s?.reportTemplate || 'classic') === 'skmch'){
+      const mod = await import('./labReport/templates/skmch')
+      return mod.previewLabReportPdfSkmch(input as any)
     }
   } catch {}
   const labName = s?.labName || 'Laboratory'
@@ -210,11 +302,33 @@ export async function previewLabReportPdf(input: {
       doc.addImage(normalized, 'PNG' as any, 40, y - 32, 70, 70, undefined, 'FAST')
     } catch {}
   }
+  doc.setFont('helvetica','bold')
   doc.setFontSize(16)
   doc.text(String(labName), 297.5, y, { align: 'center' }); y += 16
+  doc.setFont('helvetica','bold')
   doc.setFontSize(10)
   doc.text(String(address), 297.5, y, { align: 'center' }); y += 12
   doc.text(`Ph: ${phone || ''}${email? ' • '+email : ''}`, 297.5, y, { align: 'center' }); y += 16
+
+  if ((input.barcode || '').trim()) {
+    try {
+      const b = String(input.barcode || '').trim()
+      const png = await makeBarcodeDataUrl(b)
+      if (png) {
+        const bw = 220
+        const bh = 34
+        const bx = (595 - bw) / 2
+        doc.addImage(png, 'PNG' as any, bx, y - 6, bw, bh, undefined, 'FAST')
+        doc.setFont('helvetica','normal')
+        doc.setFontSize(9)
+        doc.text(b, 297.5, y + bh + 6, { align: 'center' })
+        doc.setFontSize(10)
+        y += bh + 18
+      }
+    } catch {}
+  }
+
+  doc.setFont('helvetica','normal')
   doc.setDrawColor(15); doc.line(40, y, 555, y); y += 10
   doc.setFontSize(11)
   doc.text(String(department), 297.5, y, { align: 'center' }); y += 16
@@ -240,15 +354,7 @@ export async function previewLabReportPdf(input: {
   drawKV('Referring Consultant :', String(input.referringConsultant || '-'), R, y); y += 14
   drawKV('Address :', String(input.patient.address || '-'), L, y); y += 8
 
-  const hasPrev = (input.rows||[]).some(r => (r.prevValue || '').trim().length > 0)
-  const hasFlag = (input.rows||[]).some(r => (r.flag || '').length > 0)
-  const hasComment = (input.rows||[]).some(r => (r.comment || '').trim().length > 0)
-  const head = [
-    ['Test','Normal Value','Unit', ...(hasPrev? ['Previous'] : []), 'Result', ...(hasFlag? ['Flag'] : []), ...(hasComment? ['Comment'] : [])]
-  ]
-  const body = (input.rows||[]).map(r => [
-    r.test||'', r.normal||'', r.unit||'', ...(hasPrev? [r.prevValue||''] : []), r.value||'', ...(hasFlag? [r.flag||''] : []), ...(hasComment? [r.comment||''] : [])
-  ])
+  const { head, body, idxPrev, idxFlag } = pickReportColumns(input.rows || [])
 
   const drawFooter = () => {
     const pageHeight = (doc.internal.pageSize as any).getHeight ? (doc.internal.pageSize as any).getHeight() : (doc.internal.pageSize as any).height
@@ -272,8 +378,6 @@ export async function previewLabReportPdf(input: {
   }
 
   const columnStyles: Record<number, any> = {}
-  const idxPrev = hasPrev ? 3 : -1
-  const idxFlag = hasFlag ? (hasPrev ? 5 : 4) : -1
   if (idxPrev >= 0) columnStyles[idxPrev] = { fontStyle: 'bold' }
   if (idxFlag >= 0) columnStyles[idxFlag] = { fontStyle: 'bold' }
 
@@ -297,11 +401,17 @@ export async function previewLabReportPdf(input: {
 
   const hasInterpretation2 = (input.interpretation || '').trim().length > 0
   if (hasInterpretation2) {
+    const bullets2 = String(input.interpretation || '')
+      .split(/\r?\n/)
+      .map(s => s.trim())
+      .filter(Boolean)
+      .map(s => `• ${s}`)
+      .join('\n')
     autoTable(doc, {
       startY: (((doc as any).lastAutoTable?.finalY) || (y + 12)) + 12,
       body: [
         [{ content: 'Clinical Interpretation:', styles: { fontStyle: 'bold' } }],
-        [{ content: String(input.interpretation || '') }],
+        [{ content: bullets2 || String(input.interpretation || '') }],
       ],
       theme: 'plain',
       styles: { fontSize: 10, cellPadding: 0, halign: 'left' },
@@ -389,6 +499,7 @@ async function ensurePngDataUrl(src: string): Promise<string> {
 
 export async function printLabReport(input: {
   tokenNo: string
+  barcode?: string
   createdAt: string
   sampleTime?: string
   reportingTime?: string
@@ -411,15 +522,13 @@ export async function printLabReport(input: {
     .filter(c => (c?.name||'').trim() || (c?.degrees||'').trim() || (c?.title||'').trim())
     .slice(0,3)
 
-  const hasComment = (input.rows||[]).some(r => (r.comment || '').trim().length > 0)
-  const hasPrev = (input.rows||[]).some(r => (r.prevValue || '').trim().length > 0)
-  const hasFlag = (input.rows||[]).some(r => (r.flag || '').length > 0)
+  const { nonEmptyRows, hasPrev, hasFlag, hasComment, hasNormal, hasUnit } = pickReportColumns(input.rows || [])
   const hasInterpretation = (input.interpretation || '').trim().length > 0
-  const rowsHtml = (input.rows||[]).map(r => `
+  const rowsHtml = (nonEmptyRows||[]).map(r => `
     <tr>
       <td style="padding:8px;background:#f8fafc;border-bottom:1px solid #e2e8f0">${esc(r.test||'')}</td>
-      <td style="padding:8px;background:#f8fafc;border-bottom:1px solid #e2e8f0">${esc(r.normal||'')}</td>
-      <td style="padding:8px;background:#f8fafc;border-bottom:1px solid #e2e8f0">${esc(r.unit||'')}</td>
+      ${hasNormal ? `<td style=\"padding:8px;background:#f8fafc;border-bottom:1px solid #e2e8f0\">${esc(r.normal||'')}</td>` : ''}
+      ${hasUnit ? `<td style=\"padding:8px;background:#f8fafc;border-bottom:1px solid #e2e8f0\">${esc(r.unit||'')}</td>` : ''}
       ${hasPrev ? `<td style=\"padding:8px;background:#f8fafc;border-bottom:1px solid #e2e8f0;font-weight:700\">${esc(r.prevValue||'')}</td>` : ''}
       <td style="padding:8px;background:#f8fafc;border-bottom:1px solid #e2e8f0">${esc(r.value||'')}</td>
       ${hasFlag ? `<td style=\"padding:8px;background:#f8fafc;border-bottom:1px solid #e2e8f0;font-weight:700\">${esc(r.flag||'')}</td>` : ''}
@@ -458,15 +567,15 @@ export async function printLabReport(input: {
     .kv > div:nth-child(2n){word-break:break-word}
     table{width:100%;border-collapse:collapse;margin-top:10px}
     th{padding:10px;background:#fff;border-bottom:2px solid #0f172a;text-align:left}
-    td{padding:8px}
+    td{padding:8px;text-align:left}
     .interp{margin-top:12px;font-size:14px}
-    .footnote{margin-top:24px;text-align:center;color:#475569}
+    .footnote{margin-top:24px;text-align:center;color:#475569;font-weight:700}
     .foot-hr{border-bottom:1px solid #334155;margin:10px 0}
     .sign{display:flex;justify-content:space-between;align-items:flex-start}
     .sign .cols{display:grid;gap:12px}
     .sign .left{font-size:14px}
     .sign .name{font-weight:800}
-    .sign .title{font-weight:700}
+    .sign .title{font-weight:800}
     /* prevent awkward page breaks */
     .box, table, .hdr, .dept, .hr, .sign, .interp { break-inside: avoid }
     @media print{
@@ -490,9 +599,9 @@ export async function printLabReport(input: {
       <div class="hdr">
         <div>${logo? `<img src="${esc(logo)}" alt="logo" style="height:70px;width:auto;object-fit:contain"/>` : ''}</div>
         <div>
-          <div class="title">${esc(labName)}</div>
-          <div class="muted">${esc(address)}</div>
-          <div class="muted">Ph: ${esc(phone)} ${email? ' • '+esc(email): ''}</div>
+          <div class="title"><strong>${esc(labName)}</strong></div>
+          <div class="muted"><strong>${esc(address)}</strong></div>
+          <div class="muted"><strong>Ph: ${esc(phone)} ${email? ' • '+esc(email): ''}</strong></div>
         </div>
         <div></div>
       </div>
@@ -500,8 +609,9 @@ export async function printLabReport(input: {
       <div class="hr"></div>
       <div class="box">
         <div class="kv">
-          <div>Medical Record No :</div><div>${esc(input.patient.mrn || '-')}</div>
-          <div>Sample No / Lab No :</div><div>${esc(input.tokenNo)}</div>
+          <div><strong>Medical Record No :</strong></div><div>${esc(input.patient.mrn || '-')}</div>
+          <div><strong>Sample No / Lab No :</strong></div><div>${esc(input.tokenNo)}</div>
+          ${(input.barcode || '').trim() ? `<div><strong>Barcode :</strong></div><div>${esc(String(input.barcode || '-'))}</div>` : ''}
           <div>Patient Name :</div><div>${esc(input.patient.fullName)}</div>
           <div>Age / Gender :</div><div>${esc(input.patient.age || '')} / ${esc(input.patient.gender || '')}</div>
           <div>Reg. & Sample Time :</div><div>${fmtDateTime(input.createdAt)}</div>
@@ -512,10 +622,10 @@ export async function printLabReport(input: {
         </div>
       </div>
       <table>
-        <thead><tr><th>Test</th><th>Normal Value</th><th>Unit</th>${hasPrev?'<th>Previous</th>':''}<th>Result</th>${hasFlag?'<th>Flag</th>':''}${hasComment?'<th>Comment</th>':''}</tr></thead>
+        <thead><tr><th>Test</th>${hasNormal?'<th>Normal Value</th>':''}${hasUnit?'<th>Unit</th>':''}${hasPrev?'<th>Previous</th>':''}<th>Result</th>${hasFlag?'<th>Flag</th>':''}${hasComment?'<th>Comment</th>':''}</tr></thead>
         <tbody>${rowsHtml}</tbody>
       </table>
-      ${hasInterpretation ? `<div class=\"interp\"><strong>Clinical Interpretation:</strong><br/>${esc(input.interpretation || '')}</div>` : ''}
+      ${hasInterpretation ? (()=>{ const pts = String(input.interpretation||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean); return `<div class=\"interp\"><strong>Clinical Interpretation:</strong>${pts.length? `<ul style=\"margin:6px 0 0 18px\">${pts.map(p=>`<li>${esc(p)}</li>`).join('')}</ul>` : `<div style=\"margin-top:6px\">${esc(String(input.interpretation||''))}</div>`}</div>` })() : ''}
       <div class="footnote">System Generated Report, No Signature Required. Approved By Consultant. Not Valid For Any Court Of Law.</div>
       <div class="foot-hr"></div>
       <div class="sign">

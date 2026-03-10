@@ -8,6 +8,8 @@ export type LabSlipOrderInput = {
   subtotal: number
   discount: number
   net: number
+  receivedAmount?: number
+  receivableAmount?: number
   printedBy?: string
   fbr?: { status?: string; qrCode?: string; fbrInvoiceNo?: string; mode?: string; error?: string }
 }
@@ -144,6 +146,8 @@ export async function printLabTokenSlip(order: LabSlipOrderInput){
       <div class="frow"><div>Total Amount:</div><div>${order.subtotal.toFixed(2)}</div></div>
       <div class="frow"><div>Discount:</div><div>${order.discount.toFixed(2)}</div></div>
       <div class="frow total"><div>Payable Amount:</div><div>${order.net.toFixed(2)}</div></div>
+      ${typeof order.receivedAmount === 'number' ? `<div class="frow"><div>Received:</div><div>${Number(order.receivedAmount||0).toFixed(2)}</div></div>` : ''}
+      ${typeof order.receivableAmount === 'number' ? `<div class="frow"><div>Receivable:</div><div>${Number(order.receivableAmount||0).toFixed(2)}</div></div>` : ''}
       <div style="margin-top:10px">${fbrHtml}</div>
       <div class="footer">${esc(footer || 'Powered by Hospital MIS')}</div>
     </div>

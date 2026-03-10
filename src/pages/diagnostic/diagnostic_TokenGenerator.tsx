@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import Diagnostic_TokenSlip from '../../components/diagnostic/Diagnostic_TokenSlip'
 import type { DiagnosticTokenSlipData } from '../../components/diagnostic/Diagnostic_TokenSlip'
 import { labApi, diagnosticApi, corporateApi, hospitalApi } from '../../utils/api'
+import Toast from '../../components/ui/Toast'
 
 export default function Diagnostic_TokenGenerator() {
   const location = useLocation() as any
@@ -27,8 +28,6 @@ export default function Diagnostic_TokenGenerator() {
   const [tests, setTests] = useState<Test[]>([])
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<string[]>([])
-  const [testsOpen, setTestsOpen] = useState(false)
-  const testsPickerRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     let mounted = true
       ; (async () => {
@@ -77,7 +76,7 @@ export default function Diagnostic_TokenGenerator() {
         setSelectedPatient(p)
         setFullName(p.fullName || '')
         setPhone(p.phoneNormalized || '')
-        setMrn(p.mrn || '')
+        setMrn(p.mrn || mrn)
         setAge((p.age != null && p.age !== '') ? String(p.age) : '')
         if (p.gender) setGender(String(p.gender))
         setGuardianName(p.fatherName || '')
@@ -90,12 +89,10 @@ export default function Diagnostic_TokenGenerator() {
 
   function onPhoneChange(e: React.ChangeEvent<HTMLInputElement>) {
     const v = e.target.value
-    const digitsOnly = String(v || '').replace(/\D+/g, '').slice(0, 11)
-    setPhone(digitsOnly)
-    if (forceCreateNextSubmit) setForceCreateNextSubmit(false)
+    setPhone(v)
     skipLookupKeyRef.current = null; lastPromptKeyRef.current = null
       ; (window as any)._diagPhoneDeb && clearTimeout((window as any)._diagPhoneDeb)
-    const digits = digitsOnly
+    const digits = (v || '').replace(/\D+/g, '')
     // Incremental suggestions after 3+ digits
     if ((window as any)._diagPhoneSuggestDeb) clearTimeout((window as any)._diagPhoneSuggestDeb)
     if (digits.length >= 3) {
@@ -105,7 +102,7 @@ export default function Diagnostic_TokenGenerator() {
       setPhoneSuggestOpen(false)
     }
     if (digits.length >= 10) {
-      ; (window as any)._diagPhoneDeb = setTimeout(() => autoFillByPhone(digitsOnly), 500)
+      ; (window as any)._diagPhoneDeb = setTimeout(() => autoFillByPhone(v), 500)
     }
   }
 
@@ -127,7 +124,7 @@ export default function Diagnostic_TokenGenerator() {
     setSelectedPatient(p)
     setFullName(p.fullName || '')
     setPhone(p.phoneNormalized || '')
-    setMrn(p.mrn || '')
+    setMrn(p.mrn || mrn)
     setAge((p.age != null && p.age !== '') ? String(p.age) : '')
     if (p.gender) setGender(String(p.gender))
     setGuardianName(p.fatherName || '')
@@ -171,6 +168,9 @@ export default function Diagnostic_TokenGenerator() {
   const subtotal = useMemo(() => selectedTests.reduce((s, t) => s + getEffectivePrice(t.id), 0), [selectedTests, corpCompanyId, corpTestPriceMap])
   const [discount, setDiscount] = useState('0')
   const net = Math.max(0, subtotal - (Number(discount) || 0))
+  const [receivedAmount, setReceivedAmount] = useState('0')
+  const receivedNum = Math.max(0, Math.min(net, Number(receivedAmount) || 0))
+  const receivableNum = Math.max(0, net - receivedNum)
 
   // Corporate billing (load companies)
   // Recompute corporate pricing after corpCompanyId is declared
@@ -228,43 +228,16 @@ export default function Diagnostic_TokenGenerator() {
   const autoMrnAppliedRef = useRef<boolean>(false)
   const [phonePatients, setPhonePatients] = useState<any[]>([])
   const [showPhonePicker, setShowPhonePicker] = useState(false)
-  const [forceCreateNextSubmit, setForceCreateNextSubmit] = useState(false)
   const [phoneSuggestOpen, setPhoneSuggestOpen] = useState(false)
   const [phoneSuggestItems, setPhoneSuggestItems] = useState<any[]>([])
   const phoneSuggestWrapRef = useRef<HTMLDivElement>(null)
   const phoneSuggestQueryRef = useRef<string>('')
 
-  const clearPatientFieldsKeepPhone = () => {
-    const digits = String(phone || '').replace(/\D+/g, '')
-    const norm = (s: string)=> String(s||'').trim().toLowerCase().replace(/\s+/g,' ')
-    const key = `${digits}|${norm(fullName)}`
-    setSelectedPatient(null)
-    setMrn('')
-    setFullName('')
-    setAge('')
-    setGender('')
-    setAddress('')
-    setGuardianName('')
-    setGuardianRel('')
-    setCnic('')
-    setShowPhonePicker(false)
-    setPhonePatients([])
-    setPhoneSuggestOpen(false)
-    setPhoneSuggestItems([])
-    skipLookupKeyRef.current = key
-    lastPromptKeyRef.current = key
-    setForceCreateNextSubmit(true)
-    setTimeout(() => { try { nameRef.current?.focus() } catch {} }, 50)
-  }
+  // Track if user explicitly chose to create new patient (to force creation even if phone exists)
+  const [forceCreatePatient, setForceCreatePatient] = useState(false)
 
-  useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
-      if (!testsPickerRef.current) return
-      if (!testsPickerRef.current.contains(e.target as any)) setTestsOpen(false)
-    }
-    document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
-  }, [])
+  // Toast notifications
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null)
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -363,8 +336,23 @@ export default function Diagnostic_TokenGenerator() {
       setAddress(p.address || '')
       setCnic(p.cnicNormalized || p.cnic || '')
     } catch {
-      alert('No patient found for this MR number')
+      setToast({ type: 'error', message: 'No patient found for this MR number' })
     }
+  }
+
+  const clearPatientFieldsKeepPhone = () => {
+    setSelectedPatient(null)
+    setFullName('')
+    setMrn('')
+    setAge('')
+    setGender('')
+    setGuardianRel('')
+    setGuardianName('')
+    setCnic('')
+    setAddress('')
+    setShowPhonePicker(false)
+    setForceCreatePatient(true) // Mark that we want to force create a new patient
+    setTimeout(() => { try { nameRef.current?.focus() } catch {} }, 50)
   }
 
   const generateToken = async () => {
@@ -385,19 +373,9 @@ export default function Diagnostic_TokenGenerator() {
           patient = upd?.patient || patient
         }
       } else {
-        const fr = await labApi.findOrCreatePatient({
-          fullName: fullName.trim(),
-          guardianName: guardianName || undefined,
-          phone: phone || undefined,
-          cnic: cnic || undefined,
-          gender: gender || undefined,
-          address: address || undefined,
-          age: age || undefined,
-          guardianRel: guardianRel || undefined,
-          ...(forceCreateNextSubmit ? { forceCreate: true } : {}),
-        }) as any
+        const fr = await labApi.findOrCreatePatient({ fullName: fullName.trim(), guardianName: guardianName || undefined, phone: phone || undefined, cnic: cnic || undefined, gender: gender || undefined, address: address || undefined, age: age || undefined, guardianRel: guardianRel || undefined, forceCreate: forceCreatePatient }) as any
         patient = fr?.patient
-        if (forceCreateNextSubmit) setForceCreateNextSubmit(false)
+        setForceCreatePatient(false) // Reset after using
       }
       if (!patient?._id) throw new Error('Failed to resolve patient')
 
@@ -421,6 +399,7 @@ export default function Diagnostic_TokenGenerator() {
         subtotal,
         discount: Number(discount) || 0,
         net,
+        receivedAmount: receivedNum,
         referringConsultant: referringConsultant || undefined,
         ...(corpCompanyId ? { corporateId: corpCompanyId } : {}),
         ...(corpPreAuthNo ? { corporatePreAuthNo: corpPreAuthNo } : {}),
@@ -441,7 +420,7 @@ export default function Diagnostic_TokenGenerator() {
         phone: phone.trim(),
         age: age || undefined,
         gender: gender || undefined,
-        mrn: patient.mrn || undefined,
+        mrn: patient.mrn || mrn || undefined,
         guardianRel: guardianRel || undefined,
         guardianName: guardianName || undefined,
         cnic: cnic || undefined,
@@ -451,47 +430,17 @@ export default function Diagnostic_TokenGenerator() {
         discount: Number(discount) || 0,
         payable: net,
         createdAt,
-        fbr: {
-          status: created?.fbrStatus || created?.order?.fbrStatus || created?.fbr?.status,
-          qrCode: created?.fbrQrCode || created?.order?.fbrQrCode || created?.fbr?.qrCode,
-          fbrInvoiceNo: created?.fbrInvoiceNo || created?.order?.fbrInvoiceNo || created?.fbr?.fbrInvoiceNo || created?.fbr?.invoiceNumber,
-          mode: created?.fbrMode || created?.order?.fbrMode || created?.fbr?.mode,
-          error: created?.fbrError || created?.order?.fbrError || created?.fbr?.error,
-        } as any,
       }
       setSlipData(data)
       setSlipOpen(true)
-
-      // Clear form after success (prevent stale MRN/fields from being reused)
-      setSelectedPatient(null)
-      setFullName('')
-      setPhone('')
-      setMrn('')
-      setAge('')
-      setGender('')
-      setGuardianRel('')
-      setGuardianName('')
-      setCnic('')
-      setAddress('')
-      setQuery('')
-      setSelected([])
-      setTestsOpen(false)
-      setPhoneSuggestOpen(false)
-      setPhoneSuggestItems([])
-      setShowPhonePicker(false)
-      setPhonePatients([])
-      setConfirmPatient(null)
-      setFocusAfterConfirm(null)
-      setFromReferralId('')
-      setRequestedTests([])
-      setReferringConsultant('')
+      setToast({ type: 'success', message: `Token ${data.tokenNo} generated successfully` })
     } catch (e: any) {
-      alert(e?.message || 'Failed to create order')
+      setToast({ type: 'error', message: e?.message || 'Failed to create order' })
     }
   }
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="space-y-4">
       {/* Patient Details */}
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <div className="text-base font-semibold text-slate-800">Patient Details</div>
@@ -504,7 +453,6 @@ export default function Diagnostic_TokenGenerator() {
                 value={phone}
                 onChange={onPhoneChange}
                 ref={phoneRef}
-                maxLength={11}
                 onBlur={() => lookupExistingByPhoneAndName('phone')}
                 onFocus={() => { if (phoneSuggestItems.length > 0) setPhoneSuggestOpen(true) }}
                 className="w-full rounded-md border border-slate-300 px-3 py-2"
@@ -586,32 +534,19 @@ export default function Diagnostic_TokenGenerator() {
         <div className="text-base font-semibold text-slate-800">Select Tests</div>
         <div className="text-xs text-slate-500">Tests are loaded from the Diagnostics → Tests page</div>
         <div className="mt-3 space-y-2">
-          <div ref={testsPickerRef} className="relative">
-            <input
-              value={query}
-              onChange={e => { setQuery(e.target.value); if (!testsOpen) setTestsOpen(true) }}
-              onFocus={() => setTestsOpen(true)}
-              placeholder="Search test by name/code..."
-              className="w-full rounded-md border border-slate-300 px-3 py-2"
-            />
-            {testsOpen && filtered.length > 0 && (
-              <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg">
-                {filtered.map(t => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => { setSelected(prev => [...prev, t.id]); setTestsOpen(false) }}
-                    className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-slate-50"
-                  >
-                    <div>
-                      <div className="text-sm font-medium text-slate-800">{t.name}</div>
-                    </div>
-                    <div className="text-xs text-slate-600">PKR {getEffectivePrice(t.id).toLocaleString()}</div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search test by name/code..." className="w-full rounded-md border border-slate-300 px-3 py-2" />
+          {filtered.length > 0 && (
+            <div className="max-h-64 overflow-y-auto rounded-md border border-slate-200 bg-white shadow-sm">
+              {filtered.map(t => (
+                <button key={t.id} onClick={() => setSelected(prev => [...prev, t.id])} className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-slate-50">
+                  <div>
+                    <div className="text-sm font-medium text-slate-800">{t.name}</div>
+                  </div>
+                  <div className="text-xs text-slate-600">PKR {getEffectivePrice(t.id).toLocaleString()}</div>
+                </button>
+              ))}
+            </div>
+          )}
 
           {selectedTests.length > 0 && (
             <div className="flex flex-wrap gap-2">
@@ -647,6 +582,14 @@ export default function Diagnostic_TokenGenerator() {
           <div className="flex items-center justify-between py-2 font-semibold">
             <div>Net Amount</div>
             <div>PKR {net.toLocaleString()}</div>
+          </div>
+          <div className="flex items-center justify-between py-2">
+            <div className="text-slate-600">Received</div>
+            <input value={receivedAmount} onChange={e => setReceivedAmount(e.target.value)} className="w-40 rounded-md border border-slate-300 px-3 py-1.5 text-right" placeholder="0" />
+          </div>
+          <div className="flex items-center justify-between py-2 font-semibold">
+            <div>Pending</div>
+            <div>PKR {receivableNum.toLocaleString()}</div>
           </div>
         </div>
         <div className="mt-4 flex items-center justify-end gap-2">
@@ -690,6 +633,7 @@ export default function Diagnostic_TokenGenerator() {
       {slipOpen && slipData && (
         <Diagnostic_TokenSlip open={slipOpen} onClose={() => setSlipOpen(false)} data={slipData} />
       )}
+      <Toast toast={toast} onClose={() => setToast(null)} />
       {showPhonePicker && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl ring-1 ring-black/5">

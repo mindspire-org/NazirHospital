@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Pharmacy_CashMovementSlipDialog, { type CashMovementEntry } from '../../components/pharmacy/pharmacy_CashMovementSlipDialog'
 import { pharmacyApi } from '../../utils/api'
+import Toast from '../../components/ui/Toast'
 
 function todayStr(){ const d=new Date(); const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const day=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}` }
 
@@ -24,6 +25,7 @@ export default function Pharmacy_PayInOut(){
   const [summary, setSummary] = useState<{IN:number; OUT:number; NET:number}>({ IN: 0, OUT: 0, NET: 0 })
   const [openSlip, setOpenSlip] = useState(false)
   const [slipEntry, setSlipEntry] = useState<CashMovementEntry | null>(null)
+  const [toast, setToast] = useState<{type: 'success'|'error', message: string} | null>(null)
 
   async function fetchMovements(p=page, l=limit){
     setLoading(true)
@@ -58,7 +60,7 @@ export default function Pharmacy_PayInOut(){
 
   const add = async () => {
     const amt = parseFloat(String(amount||'').trim())
-    if (!isFinite(amt) || amt <= 0) { alert('Enter a valid amount'); return }
+    if (!isFinite(amt) || amt <= 0) { setToast({ type: 'error', message: 'Enter a valid amount' }); return }
     let created: any
     try {
       created = await pharmacyApi.createCashMovement({
@@ -70,7 +72,7 @@ export default function Pharmacy_PayInOut(){
         receiver: receiver.trim() || undefined,
         handoverBy: handoverBy.trim() || undefined,
       })
-    } catch (e){ alert('Failed to save'); return }
+    } catch (e){ setToast({ type: 'error', message: 'Failed to save' }); return }
     const entry: CashMovementEntry = {
       id: created?._id || crypto.randomUUID(),
       date: created?.date || date || todayStr(),
@@ -218,6 +220,7 @@ export default function Pharmacy_PayInOut(){
       </div>
 
       <Pharmacy_CashMovementSlipDialog open={openSlip} onClose={()=>setOpenSlip(false)} entry={slipEntry} />
+      {toast && <Toast toast={toast} onClose={()=>setToast(null)} />}
     </div>
   )
 }

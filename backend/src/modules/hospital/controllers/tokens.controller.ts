@@ -54,6 +54,36 @@ function computeSlotStartEnd(startTime: string, slotMinutes: number, slotNo: num
   return { start: fromMin(start), end: fromMin(start + (slotMinutes||15)) }
 }
 
+async function findMatchingScheduleForNow({ doctorId, dateIso, departmentId }: { doctorId?: string; dateIso: string; departmentId?: string }){
+  if (!doctorId) return null
+  const now = new Date()
+  const hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
+  const cur = toMin(hhmm)
+  
+  // Try with department first (strict match)
+  let filter: any = { doctorId, dateIso }
+  if (departmentId) filter.departmentId = departmentId
+  let schedules: any[] = await HospitalDoctorSchedule.find(filter).sort({ startTime: 1 }).lean()
+  
+  // If no match and department was specified, try without department
+  if (schedules.length === 0 && departmentId) {
+    filter = { doctorId, dateIso }
+    schedules = await HospitalDoctorSchedule.find(filter).sort({ startTime: 1 }).lean()
+  }
+  
+  // Debug: check what schedules exist for this date at all
+  if (schedules.length === 0) {
+    const anySchedules = await HospitalDoctorSchedule.find({ dateIso }).limit(5).lean()
+  }
+  
+  for (const s of schedules){
+    const st = toMin(String(s.startTime || '00:00'))
+    const en = toMin(String(s.endTime || '00:00'))
+    if (cur >= st && cur < en) return s
+  }
+  return null
+}
+
 export async function createOpd(req: Request, res: Response){
   const data = createOpdTokenSchema.parse(req.body)
   if ((data as any).corporateId){
@@ -195,10 +225,35 @@ export async function createOpd(req: Request, res: Response){
     }
     tokenNo = String(slotNo)
   } else {
-    // No schedule provided: fallback to global sequential token
-    const next = await nextTokenNo()
-    tokenNo = next.tokenNo
-    dateIso = next.dateIso
+    // No schedule provided: try to auto-match current time within a doctor's schedule for today.
+    const todayIso = new Date().toISOString().slice(0,10)
+    const autoSched: any = await findMatchingScheduleForNow({ doctorId: data.doctorId, dateIso: todayIso, departmentId: data.departmentId })
+    if (autoSched){
+      scheduleId = autoSched._id
+      dateIso = String(autoSched.dateIso)
+      const slotMinutes = Number(autoSched.slotMinutes || 15)
+      const totalSlots = Math.floor((toMin(autoSched.endTime) - toMin(autoSched.startTime)) / slotMinutes)
+      const taken = await HospitalToken.find({ scheduleId: autoSched._id, status: { $nin: ['returned','cancelled'] } }).select('slotNo').lean()
+      const appts = await HospitalAppointment.find({ scheduleId: autoSched._id, status: { $in: ['booked','confirmed','checked-in'] } }).select('slotNo').lean()
+      const used = new Set<number>([...((taken||[]).map((t:any)=> Number(t.slotNo||0))), ...((appts||[]).map((a:any)=> Number(a.slotNo||0)))] )
+      let idx = 0
+      for (let i=1;i<=totalSlots;i++){ if (!used.has(i)){ idx = i; break } }
+      if (!idx) return res.status(409).json({ error: 'No free slot available in this schedule' })
+      slotNo = idx
+      const se = computeSlotStartEnd(autoSched.startTime, slotMinutes, idx)
+      slotStart = se.start
+      slotEnd = se.end
+      if (!hasOverride){
+        if (data.visitType === 'followup' && (autoSched as any).followupFee != null){ resolvedFee = Number((autoSched as any).followupFee); feeSource = 'schedule-followup' }
+        else if ((autoSched as any).fee != null){ resolvedFee = Number((autoSched as any).fee); feeSource = 'schedule' }
+      }
+      tokenNo = String(slotNo)
+    } else {
+      // No matching schedule: fallback to global sequential token and default fee.
+      const next = await nextTokenNo()
+      tokenNo = next.tokenNo
+      dateIso = next.dateIso
+    }
   }
 
   const finalFee = hasOverride ? Math.max(0, Number(overrideFee)) : Math.max(0, resolvedFee - (data.discount || 0))
@@ -219,10 +274,13 @@ export async function createOpd(req: Request, res: Response){
     patientId: patient._id,
     mrn: patient.mrn,
     patientName: patient.fullName,
+    createdByUserId: (req as any).user?._id || (req as any).user?.id || undefined,
+    createdByUsername: (req as any).user?.username || undefined,
     departmentId: data.departmentId,
     doctorId: data.doctorId,
     encounterId: enc._id,
     corporateId: corporateId || undefined,
+    paidMethod: (data as any).paidMethod || ((data as any).corporateId ? 'AR' : 'Cash'),
     fee: finalFee,
     discount: Number(data.discount || 0),
     status: 'queued',
@@ -267,8 +325,8 @@ export async function createOpd(req: Request, res: Response){
 
   // Finance: post OPD revenue and doctor share accrual
   try {
-    // Determine paid method: treat corporate as AR, otherwise Cash
-    const paidMethod = (data as any).corporateId ? 'AR' : 'Cash'
+    // Determine paid method: corporate defaults to AR; non-corporate uses request-selected method
+    const paidMethod = (data as any).corporateId ? 'AR' : ((data as any).paidMethod || 'Cash')
     // Attach sessionId if a cash drawer session is open for this user and method is Cash
     let sessionId: string | undefined = undefined
     if (paidMethod === 'Cash'){
@@ -292,6 +350,7 @@ export async function createOpd(req: Request, res: Response){
       tokenNo,
       paidMethod: paidMethod as any,
       sessionId,
+      createdByUsername: (req as any).user?.username || (req as any).user?.name || undefined,
     })
   } catch (e) {
     // do not fail token creation if finance posting has an error

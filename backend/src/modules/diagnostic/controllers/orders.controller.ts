@@ -161,23 +161,16 @@ export async function list(req: Request, res: Response){
 
 
 export async function create(req: Request, res: Response){
-
   const data = diagnosticOrderCreateSchema.parse(req.body)
-
+  const isCorporate = Boolean((data as any).corporateId)
+  const coPayPct = Math.max(0, Math.min(100, Number((data as any)?.corporateCoPayPercent || 0)))
   if ((data as any).corporateId){
-
     const comp = await CorporateCompany.findById(String((data as any).corporateId)).lean()
-
     if (!comp) return res.status(400).json({ error: 'Invalid corporateId' })
-
     if ((comp as any).active === false) return res.status(400).json({ error: 'Corporate company inactive' })
-
   }
-
   const tokenNo = (data as any).tokenNo || await nextToken(new Date())
-
   const items = (data.tests || []).map(tid => ({ testId: tid, status: 'received' as const }))
-
   // Always sync snapshot MRN from shared patient table (Lab_Patient)
   try {
     const pid = String((data as any)?.patientId || '').trim()
@@ -189,10 +182,52 @@ export async function create(req: Request, res: Response){
     }
   } catch {}
 
-  const doc: any = await DiagnosticOrder.create({ ...data, items, tokenNo, status: 'received' })
+  // If corporate: compute diagnostic-side income as co-pay amount on list prices.
+  let corpCoPayIncome = 0
+  if (isCorporate && coPayPct > 0){
+    try {
+      const ids = Array.isArray((data as any).tests) ? (data as any).tests : []
+      const docs = await DiagnosticTest.find({ _id: { $in: ids } }).select('price').lean()
+      const sum = (docs || []).reduce((s: number, t: any)=> s + Math.max(0, Number(t?.price || 0)), 0)
+      corpCoPayIncome = Math.max(0, sum * (coPayPct/100))
+    } catch {}
+  }
+
+  // Compute received/receivable for cash orders (corporate has 0 receivable)
+  let received = 0, receivable = 0
+  if (isCorporate) {
+    // Corporate: received = min(corpCoPayIncome, receivedAmount input), receivable = 0
+    const inputReceived = Math.max(0, Number((data as any).receivedAmount || 0))
+    received = Math.min(corpCoPayIncome, inputReceived)
+    receivable = 0
+  } else {
+    // Cash: standard calculation
+    const net = Math.max(0, Number((data as any).net || (data as any).subtotal || 0) - Number((data as any).discount || 0))
+    const inputReceived = Math.max(0, Number((data as any).receivedAmount || 0))
+    received = Math.min(net, inputReceived)
+    receivable = Math.max(0, net - received)
+  }
+
+  const doc: any = await DiagnosticOrder.create({ 
+    ...data, 
+    items, 
+    tokenNo, 
+    status: 'received',
+    receivedAmount: received,
+    receivableAmount: receivable,
+    // Corporate tokens are billed via Corporate module; Diagnostic ledger should only reflect co-pay (if any).
+    ...(isCorporate
+      ? {
+          subtotal: 0,
+          discount: 0,
+          net: corpCoPayIncome,
+        }
+      : {}),
+  })
 
   // FBR fiscalization (Diagnostic is paid at order creation)
   try {
+    if (isCorporate) throw new Error('skip_fbr_for_corporate')
     const payload = {
       tokenNo,
       patient: (data as any).patient || undefined,
@@ -339,10 +374,58 @@ export async function create(req: Request, res: Response){
   } catch (e) { console.warn('Failed to create corporate transactions for Diagnostic order', e) }
 
   res.status(201).json(doc)
-
 }
 
+export async function receivePayment(req: Request, res: Response){
+  const tokenNo = String((req as any).params?.tokenNo || '').trim()
+  if (!tokenNo) return res.status(400).json({ error: 'tokenNo is required' })
+  try {
+    const anyCorporate = await DiagnosticOrder.exists({ tokenNo, corporateId: { $exists: true, $ne: null } })
+    if (anyCorporate) return res.status(400).json({ error: 'Cannot receive cash payment for corporate token' })
+  } catch {}
+  const amount = Math.max(0, Number((req as any).body?.amount || 0))
+  const note = String((req as any).body?.note || '').trim() || undefined
+  const method = String((req as any).body?.method || '').trim() || undefined
+  if (amount <= 0) return res.status(400).json({ error: 'amount must be > 0' })
 
+  const actor = (req as any).user?.name || (req as any).user?.email || 'system'
+  
+  // Get all orders for this token and compute totals
+  const orders = await DiagnosticOrder.find({ tokenNo }).lean()
+  if (!orders.length) return res.status(404).json({ error: 'Token not found' })
+  
+  const tokenNet = orders.reduce((sum: number, o: any) => sum + Math.max(0, Number(o?.net || 0)), 0)
+  const already = orders.reduce((sum: number, o: any) => sum + Math.max(0, Number(o?.receivedAmount || 0)), 0)
+  
+  const nextReceived = Math.min(tokenNet, already + amount)
+  const deltaApplied = Math.max(0, nextReceived - already)
+  const nextReceivable = Math.max(0, tokenNet - nextReceived)
+  if (deltaApplied <= 0) return res.status(400).json({ error: 'Nothing receivable for this token' })
+
+  const payment = { amount: deltaApplied, at: new Date().toISOString(), note, method, receivedBy: actor }
+  await DiagnosticOrder.updateMany(
+    { tokenNo },
+    {
+      $set: { receivedAmount: nextReceived, receivableAmount: nextReceivable },
+      $push: { payments: payment },
+    },
+  )
+
+  try {
+    await DiagnosticAuditLog.create({
+      actor,
+      action: 'Receive Payment',
+      label: 'DIAG_RECEIVE_PAYMENT',
+      method: 'POST',
+      path: req.originalUrl,
+      at: new Date().toISOString(),
+      detail: `Token ${tokenNo} — Received ${deltaApplied}`,
+    })
+  } catch {}
+
+  const updated = await DiagnosticOrder.find({ tokenNo }).sort({ createdAt: 1 }).lean()
+  res.json({ tokenNo, receivedAmount: nextReceived, receivableAmount: nextReceivable, payment, items: updated })
+}
 
 export async function updateTrack(req: Request, res: Response){
 
@@ -889,6 +972,288 @@ export async function removeItem(req: Request, res: Response){
   } catch {}
 
   res.json({ success: true, order: doc })
+
+}
+
+
+
+// Return an order - marks it as returned and records return amount
+
+export async function returnOrder(req: Request, res: Response){
+
+  const { id } = req.params
+
+  const { reason, amount } = req.body as { reason?: string; amount?: number }
+
+  const doc: any = await DiagnosticOrder.findById(id)
+
+  if (!doc) return res.status(404).json({ message: 'Order not found' })
+
+  if (doc.status === 'returned') return res.status(400).json({ message: 'Order is already returned' })
+
+  const actor = getActor(req) as any
+
+  const now = new Date().toISOString()
+
+  // Calculate return amount - if not provided, use the received amount
+
+  const returnAmount = amount && amount > 0 ? Math.min(amount, doc.receivedAmount || 0) : (doc.receivedAmount || 0)
+
+  // Update order with return info
+
+  doc.status = 'returned'
+
+  ;(doc.items || []).forEach((item: any) => { item.status = 'returned' })
+
+  doc.returnedTests = [...(doc.tests || [])]
+
+  doc.returnInfo = {
+
+    amount: returnAmount,
+
+    at: now,
+
+    reason: reason || 'Returned',
+
+    returnedBy: actor.actorUsername || 'system',
+
+  }
+
+  // Adjust financial amounts - reduce net and received by return amount
+
+  const originalNet = doc.net || 0
+
+  const originalReceived = doc.receivedAmount || 0
+
+  doc.net = Math.max(0, originalNet - returnAmount)
+
+  doc.receivedAmount = Math.max(0, originalReceived - returnAmount)
+
+  doc.receivableAmount = Math.max(0, doc.net - doc.receivedAmount)
+
+  await doc.save()
+
+  // Corporate: create reversals for all items
+
+  try {
+
+    if (doc.corporateId) {
+
+      const existing: any[] = await CorporateTransaction.find({ refType: 'diag_order', refId: String(id), status: { $ne: 'reversed' } }).lean()
+
+      for (const tx of existing){
+
+        try { await CorporateTransaction.findByIdAndUpdate(String(tx._id), { $set: { status: 'reversed' } }) } catch {}
+
+        try {
+
+          await CorporateTransaction.create({
+
+            companyId: tx.companyId,
+
+            patientMrn: tx.patientMrn,
+
+            patientName: tx.patientName,
+
+            serviceType: tx.serviceType,
+
+            refType: tx.refType,
+
+            refId: tx.refId,
+
+            itemRef: tx.itemRef,
+
+            dateIso: new Date().toISOString().slice(0,10),
+
+            description: `Return: ${tx.description || 'Diagnostic Test'}`,
+
+            qty: tx.qty,
+
+            unitPrice: -Math.abs(Number(tx.unitPrice||0)),
+
+            corpUnitPrice: -Math.abs(Number(tx.corpUnitPrice||0)),
+
+            coPay: -Math.abs(Number(tx.coPay||0)),
+
+            netToCorporate: -Math.abs(Number(tx.netToCorporate||0)),
+
+            corpRuleId: tx.corpRuleId,
+
+            status: 'accrued',
+
+            reversalOf: String(tx._id),
+
+          })
+
+        } catch (e) { console.warn('Failed to create corporate reversal for Diagnostic return', e) }
+
+      }
+
+    }
+
+  } catch (e) { console.warn('Corporate reversal for return failed', e) }
+
+  // Audit log
+
+  try {
+
+    await DiagnosticAuditLog.create({
+
+      action: 'order.return',
+
+      subjectType: 'Order',
+
+      subjectId: String(doc._id),
+
+      message: `Returned order ${doc.tokenNo || id} - Amount: ${returnAmount}`,
+
+      data: { reason, returnAmount, originalNet, originalReceived },
+
+      actorId: actor.actorId,
+
+      actorUsername: actor.actorUsername,
+
+      ip: req.ip,
+
+      userAgent: String(req.headers['user-agent']||''),
+
+    })
+
+  } catch {}
+
+  res.json({ success: true, order: doc, returnAmount })
+
+}
+
+
+
+// Undo a return - restores order to previous state
+
+export async function undoReturn(req: Request, res: Response){
+
+  const { id } = req.params
+
+  const doc: any = await DiagnosticOrder.findById(id)
+
+  if (!doc) return res.status(404).json({ message: 'Order not found' })
+
+  if (doc.status !== 'returned') return res.status(400).json({ message: 'Order is not in returned status' })
+
+  const actor = getActor(req) as any
+
+  const returnInfo = doc.returnInfo || { amount: 0 }
+
+  const returnAmount = returnInfo.amount || 0
+
+  // Restore financial amounts
+
+  doc.net = (doc.net || 0) + returnAmount
+
+  doc.receivedAmount = (doc.receivedAmount || 0) + returnAmount
+
+  doc.receivableAmount = Math.max(0, doc.net - doc.receivedAmount)
+
+  // Reset status - default to 'received' since we don't know previous state
+
+  doc.status = 'received'
+
+  ;(doc.items || []).forEach((item: any) => { item.status = 'received' })
+
+  doc.returnedTests = []
+
+  // Clear return info
+
+  doc.returnInfo = { amount: 0 }
+
+  await doc.save()
+
+  // Corporate: reverse the return transactions
+
+  try {
+
+    if (doc.corporateId) {
+
+      const reversed: any[] = await CorporateTransaction.find({ refType: 'diag_order', refId: String(id), description: { $regex: /^Return:/ } }).lean()
+
+      for (const tx of reversed){
+
+        try { await CorporateTransaction.findByIdAndUpdate(String(tx._id), { $set: { status: 'reversed' } }) } catch {}
+
+        try {
+
+          await CorporateTransaction.create({
+
+            companyId: tx.companyId,
+
+            patientMrn: tx.patientMrn,
+
+            patientName: tx.patientName,
+
+            serviceType: tx.serviceType,
+
+            refType: tx.refType,
+
+            refId: tx.refId,
+
+            itemRef: tx.itemRef,
+
+            dateIso: new Date().toISOString().slice(0,10),
+
+            description: `Undo Return: ${tx.description || 'Diagnostic Test'}`,
+
+            qty: tx.qty,
+
+            unitPrice: Math.abs(Number(tx.unitPrice||0)),
+
+            corpUnitPrice: Math.abs(Number(tx.corpUnitPrice||0)),
+
+            coPay: Math.abs(Number(tx.coPay||0)),
+
+            netToCorporate: Math.abs(Number(tx.netToCorporate||0)),
+
+            corpRuleId: tx.corpRuleId,
+
+            status: 'accrued',
+
+          })
+
+        } catch (e) { console.warn('Failed to create corporate undo for Diagnostic return', e) }
+
+      }
+
+    }
+
+  } catch (e) { console.warn('Corporate undo for return failed', e) }
+
+  // Audit log
+
+  try {
+
+    await DiagnosticAuditLog.create({
+
+      action: 'order.undoReturn',
+
+      subjectType: 'Order',
+
+      subjectId: String(doc._id),
+
+      message: `Undo return for order ${doc.tokenNo || id} - Restored amount: ${returnAmount}`,
+
+      data: { returnAmount, restoredNet: doc.net, restoredReceived: doc.receivedAmount },
+
+      actorId: actor.actorId,
+
+      actorUsername: actor.actorUsername,
+
+      ip: req.ip,
+
+      userAgent: String(req.headers['user-agent']||''),
+
+    })
+
+  } catch {}
+
+  res.json({ success: true, order: doc, restoredAmount: returnAmount })
 
 }
 

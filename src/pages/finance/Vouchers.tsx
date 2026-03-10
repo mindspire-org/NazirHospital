@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { financeApi } from '../../utils/api'
+import Toast, { type ToastState } from '../../components/ui/Toast'
 
 type Line = { account: string; debit?: string; credit?: string }
 	export default function Finance_Vouchers(){
@@ -10,6 +11,7 @@ type Line = { account: string; debit?: string; credit?: string }
   const [type, setType] = useState<'receipt'|'payment'|'journal'>('journal')
   const [memo, setMemo] = useState('')
   const [lines, setLines] = useState<Line[]>([{ account: 'CASH', debit: '0', credit: '0' }, { account: 'OPD_REVENUE', debit: '0', credit: '0' }])
+  const [toast, setToast] = useState<ToastState>(null)
 
   useEffect(()=>{ load() }, [])
 
@@ -36,15 +38,15 @@ type Line = { account: string; debit?: string; credit?: string }
 
   async function saveVoucher(e: React.FormEvent){
     e.preventDefault()
-    if (!totals.balanced) { alert('Voucher not balanced (debits must equal credits).'); return }
+    if (!totals.balanced) { setToast({ type: 'error', message: 'Voucher not balanced (debits must equal credits).' }); return }
     const mapped = lines.map(l=> ({ account: l.account.trim(), debit: parseFloat(l.debit||'0')||0, credit: parseFloat(l.credit||'0')||0 }))
     try {
       await financeApi.createVoucher({ type, memo: memo||undefined, lines: mapped })
       setMemo('')
       setLines([{ account: 'CASH', debit: '0', credit: '0' }, { account: 'OPD_REVENUE', debit: '0', credit: '0' }])
       await load()
-      alert('Voucher saved')
-    } catch (e:any){ alert(e?.message || 'Failed to save voucher') }
+      setToast({ type: 'success', message: 'Voucher saved' })
+    } catch (e:any){ setToast({ type: 'error', message: e?.message || 'Failed to save voucher' }) }
   }
 
   return (
@@ -137,6 +139,7 @@ type Line = { account: string; debit?: string; credit?: string }
           </tbody>
         </table>
       </div>
+      <Toast toast={toast} onClose={()=>setToast(null)} />
     </div>
   )
 }

@@ -12,7 +12,7 @@ export default function Lab_Settings() {
   const [reportFooter, setReportFooter] = useState('')
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null)
   const [department, setDepartment] = useState('')
-  const [reportTemplate, setReportTemplate] = useState<'classic'|'tealGradient'|'modern'>('classic')
+  const [reportTemplate, setReportTemplate] = useState<'classic'|'tealGradient'|'modern'|'adl'|'skmch'>('classic')
   const [slipTemplate, setSlipTemplate] = useState<'thermal'|'a4Bill'>('thermal')
   const [consultantName, setConsultantName] = useState('')
   const [consultantDegrees, setConsultantDegrees] = useState('')
@@ -34,7 +34,7 @@ export default function Lab_Settings() {
         setReportFooter(s.reportFooter || '')
         setLogoDataUrl(s.logoDataUrl || null)
         setDepartment(s.department || '')
-        setReportTemplate((s.reportTemplate === 'tealGradient' ? 'tealGradient' : (s.reportTemplate === 'modern' ? 'modern' : 'classic')))
+        setReportTemplate((s.reportTemplate === 'tealGradient' ? 'tealGradient' : (s.reportTemplate === 'modern' ? 'modern' : (s.reportTemplate === 'adl' ? 'adl' : (s.reportTemplate === 'skmch' ? 'skmch' : 'classic')))))
         setSlipTemplate((s.slipTemplate === 'a4Bill' ? 'a4Bill' : 'thermal'))
         setConsultantName(s.consultantName || '')
         setConsultantDegrees(s.consultantDegrees || '')
@@ -133,10 +133,12 @@ export default function Lab_Settings() {
 
             <div>
               <label className="mb-1 block text-sm text-slate-700">Report Template</label>
-              <select value={reportTemplate} onChange={e=> setReportTemplate((e.target.value as 'classic'|'tealGradient'|'modern') || 'classic')} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+              <select value={reportTemplate} onChange={e=> setReportTemplate((e.target.value as 'classic'|'tealGradient'|'modern'|'adl'|'skmch') || 'classic')} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
                 <option value="classic">Classic</option>
                 <option value="tealGradient">Teal Gradient</option>
                 <option value="modern">Modern (International)</option>
+                <option value="adl">ADL</option>
+                <option value="skmch">SKMCH</option>
               </select>
             </div>
 

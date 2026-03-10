@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { pharmacyApi } from '../../utils/api'
+import Toast from '../../components/ui/Toast'
 
 type User = { _id: string; username: string; role: string }
 
@@ -17,6 +18,7 @@ export default function Pharmacy_UserManagement() {
   const [newRoleName, setNewRoleName] = useState('')
   const [creatingRole, setCreatingRole] = useState(false)
   const [addUserError, setAddUserError] = useState('')
+  const [toast, setToast] = useState<{type: 'success'|'error', message: string} | null>(null)
 
   async function load(){
     setLoading(true)
@@ -103,7 +105,7 @@ export default function Pharmacy_UserManagement() {
       await pharmacyApi.deleteUser(_id)
       setUsers(prev => prev.filter(u => u._id !== _id))
     } catch (e: any) {
-      alert(e?.message || 'Failed to delete user')
+      setToast({ type: 'error', message: e?.message || 'Failed to delete user' })
     }
   }
 
@@ -133,7 +135,7 @@ export default function Pharmacy_UserManagement() {
       setNewRoleName('')
       setNewRole(role)
     } catch (e: any) {
-      alert(e?.message || 'Failed to create role')
+      setToast({ type: 'error', message: e?.message || 'Failed to create role' })
     } finally {
       setCreatingRole(false)
     }
@@ -353,6 +355,7 @@ export default function Pharmacy_UserManagement() {
         </div>
       </div>
     )}
+    {toast && <Toast toast={toast} onClose={()=>setToast(null)} />}
     </>
   )
 }

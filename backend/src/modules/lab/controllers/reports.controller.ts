@@ -33,14 +33,14 @@ export async function summary(req: Request, res: Response){
   const { from, to } = rangeFromQuery(req.query)
 
   const [ordersInRange, expensesInRange, purchasesAll] = await Promise.all([
-    LabOrder.find({ createdAt: { $gte: from, $lte: to } }).select('createdAt tests net status').lean(),
+    LabOrder.find({ createdAt: { $gte: from, $lte: to }, corporateId: { $exists: false } }).select('createdAt tests net status tokenNo receivedAmount receivableAmount').lean(),
     LabExpense.find({}).lean(), // we'll filter by date below since it's a string
     LabPurchase.find({}).lean(), // filter by string date like expenses
   ])
 
   const totalOrders = ordersInRange.length
   const totalTests = ordersInRange.reduce((s:any,o:any)=> s + (Array.isArray(o.tests)? o.tests.length : 0), 0)
-  const totalRevenue = ordersInRange.reduce((s:any,o:any)=> s + Number(o.net||0), 0)
+  const totalRevenueRaw = ordersInRange.reduce((s:any,o:any)=> s + Number(o.net||0), 0)
   const pendingResults = ordersInRange.reduce((s:any,o:any)=> s + (o.status==='received' ? 1 : 0), 0)
   const approvedResults = ordersInRange.reduce((s:any,o:any)=> s + (o.status==='completed' ? 1 : 0), 0)
 
@@ -74,6 +74,41 @@ export async function summary(req: Request, res: Response){
   const totalPurchases = purFromTo.length
   const totalPurchasesAmount = purFromTo.reduce((s:any,p:any)=> s + Number((p.totals?.net ?? p.totalAmount) || 0), 0)
 
+  const match: any = {}
+  match.corporateId = { $exists: false }
+  if (from || to) {
+    match.createdAt = {}
+    if (from) match.createdAt.$gte = from
+    if (to) match.createdAt.$lte = to
+  }
+  const totalRevenueAgg = await LabOrder.aggregate([
+    { $match: match },
+    { $group: { _id: null, total: { $sum: '$net' } } },
+  ])
+  const totalRevenue = Number(totalRevenueAgg?.[0]?.total || 0)
+
+  // Token-wise received/receivable (avoid multiplying by per-test rows)
+  const tokenPayAgg = await LabOrder.aggregate([
+    { $match: match },
+    { $sort: { createdAt: -1 } },
+    {
+      $group: {
+        _id: '$tokenNo',
+        receivedAmount: { $first: '$receivedAmount' },
+        receivableAmount: { $first: '$receivableAmount' },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        totalReceived: { $sum: '$receivedAmount' },
+        totalReceivable: { $sum: '$receivableAmount' },
+      },
+    },
+  ])
+  const totalReceived = Number(tokenPayAgg?.[0]?.totalReceived || 0)
+  const totalReceivable = Number(tokenPayAgg?.[0]?.totalReceivable || 0)
+
   res.json({
     from: from.toISOString(),
     to: to.toISOString(),
@@ -86,6 +121,8 @@ export async function summary(req: Request, res: Response){
     totalPurchases,
     totalPurchasesAmount: Number(totalPurchasesAmount.toFixed(2)),
     dailyRevenue,
+    totalReceived,
+    totalReceivable,
     comparison: [
       { label: 'Revenue', value: Number(totalRevenue.toFixed(2)) },
       { label: 'Expenses', value: Number(totalExpenses.toFixed(2)) },

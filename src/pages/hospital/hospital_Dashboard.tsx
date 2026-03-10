@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { TrendingUp, DollarSign, Users, BedSingle, Activity, RefreshCw, Clock, CalendarClock, Filter, RotateCcw, BarChart3 } from 'lucide-react'
+import { TrendingUp, DollarSign, Users, BedSingle, Activity, RefreshCw, Clock, CalendarClock, Filter, RotateCcw, BarChart3, X } from 'lucide-react'
 import { hospitalApi, financeApi, labApi } from '../../utils/api'
+import { fmt12 } from '../../utils/timeFormat'
 
 function iso(d: Date){ return d.toISOString().slice(0,10) }
 function startOfMonth(d: Date){ const x = new Date(d); x.setDate(1); return x }
@@ -40,6 +41,7 @@ export default function Hospital_Dashboard() {
   const [toDate, setToDate] = useState<string>(iso(new Date()))
   const [fromTime, setFromTime] = useState<string>('')
   const [toTime, setToTime] = useState<string>('')
+  const [revByMethod, setRevByMethod] = useState<{ cash: number; card: number }>({ cash: 0, card: 0 })
   const [stats, setStats] = useState({
     tokens: 0,
     admissions: 0,
@@ -50,13 +52,20 @@ export default function Hospital_Dashboard() {
     present: 0,
     late: 0,
   })
-  // tokens state not needed for widgets; using counts from fetched arrays directly
+  const [tokens, setTokens] = useState<any[]>([])
+  const [ipdAdmissions, setIpdAdmissions] = useState<any[]>([])
   const [expenses, setExpenses] = useState<any[]>([])
   const [ipdPayments, setIpdPayments] = useState<any[]>([])
   const [doctorEarnRows, setDoctorEarnRows] = useState<any[]>([])
   const [doctorPayoutsTotal, setDoctorPayoutsTotal] = useState<number>(0)
   const [opdRevenueAmt, setOpdRevenueAmt] = useState<number>(0)
   const [ipdRevenueAmt, setIpdRevenueAmt] = useState<number>(0)
+  const [erRevenueAmt, setErRevenueAmt] = useState<number>(0)
+  const [erTransactions, setErTransactions] = useState<any[]>([])
+  const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([])
+  const [corporateArItems, setCorporateArItems] = useState<Array<{ companyId: string; companyName: string; balance: number }>>([])
+  const [corporateArAmt, setCorporateArAmt] = useState<number>(0)
+  const [showArModal, setShowArModal] = useState(false)
   const REFRESH_MS = 15000
 
   // Shifts for global filter
@@ -97,7 +106,7 @@ export default function Hospital_Dashboard() {
   async function load(){
     setLoading(true)
     try {
-      const [tokensRes, expensesRes, staffRes, bedsAllRes, bedsOccRes, attRes, shiftsRes, ipdAdmsRes, doctorsRes, trialRes] = await Promise.all([
+      const [tokensRes, expensesRes, staffRes, bedsAllRes, bedsOccRes, attRes, shiftsRes, ipdAdmsRes, doctorsRes, trialRes, depsRes] = await Promise.all([
         hospitalApi.listTokens({ from: fromDate, to: toDate }) as any,
         hospitalApi.listExpenses({ from: fromDate, to: toDate }) as any,
         hospitalApi.listStaff() as any,
@@ -108,6 +117,7 @@ export default function Hospital_Dashboard() {
         hospitalApi.listIPDAdmissions({ from: fromDate, to: toDate, limit: 500 }) as any,
         hospitalApi.listDoctors() as any,
         financeApi.trialBalance({ from: fromDate, to: toDate }) as any,
+        hospitalApi.listDepartments() as any,
       ])
       let tokensArr: any[] = tokensRes?.tokens || tokensRes?.items || tokensRes || []
       let expensesArr: any[] = expensesRes?.expenses || expensesRes?.items || expensesRes || []
@@ -118,6 +128,11 @@ export default function Hospital_Dashboard() {
       let shifts: any[] = (shiftsRes?.items || shiftsRes || [])
       const ipdAdms: any[] = ipdAdmsRes?.admissions || ipdAdmsRes?.items || ipdAdmsRes || []
 
+      try {
+        const depArr: any[] = (depsRes?.departments || depsRes?.items || depsRes || [])
+        setDepartments(depArr.map((d:any)=> ({ id: String(d._id||d.id), name: String(d.name||'') })).filter((d:any)=> d.id && d.name))
+      } catch { setDepartments([]) }
+
       // Apply global time window if enabled
       const win = getEffectiveWindow()
       if (win){
@@ -125,6 +140,8 @@ export default function Hospital_Dashboard() {
         tokensArr = tokensArr.filter(inWin)
         expensesArr = expensesArr.filter(inWin)
       }
+      setIpdAdmissions(ipdAdms)
+      setTokens(tokensArr)
       setExpenses(expensesArr)
       setDoctorEarnRows([])
 
@@ -177,7 +194,18 @@ export default function Hospital_Dashboard() {
       }
       setIpdPayments(ipdPayFlat)
 
-      // Revenue (from FinanceJournal trial balance)
+      // Fetch ER transactions with department info for department revenue calculation
+      try {
+        const erTxRes: any = await hospitalApi.listTransactions({ from: fromDate, to: toDate, type: 'ER', limit: 1000 })
+        setErTransactions(erTxRes?.transactions || [])
+      } catch { setErTransactions([]) }
+      // Fetch corporate AR breakdown
+      try {
+        const arRes: any = await hospitalApi.getCorporateARBreakdown({ from: fromDate, to: toDate })
+        setCorporateArItems(arRes?.items || [])
+        setCorporateArAmt(arRes?.totalAR || 0)
+      } catch { setCorporateArItems([]); setCorporateArAmt(0) }
+
       try {
         const rows: any[] = (trialRes?.rows || [])
         const byAcc: Record<string, any> = {}
@@ -185,7 +213,8 @@ export default function Hospital_Dashboard() {
         const revOf = (acc: string) => money(-(byAcc[acc]?.balance || 0))
         setOpdRevenueAmt(revOf('OPD_REVENUE'))
         setIpdRevenueAmt(revOf('IPD_REVENUE'))
-      } catch { setOpdRevenueAmt(0); setIpdRevenueAmt(0) }
+        setErRevenueAmt(revOf('ER_REVENUE'))
+      } catch { setOpdRevenueAmt(0); setIpdRevenueAmt(0); setErRevenueAmt(0) }
 
       const totalBeds = allBeds.length
       const occupied = occBeds.length
@@ -211,6 +240,33 @@ export default function Hospital_Dashboard() {
 
       setStats({ tokens: tokensArr.length, admissions: ipdAdms.length, discharges: (ipdAdmsRes?.admissions||[]).filter((a:any)=>a.status==='discharged').length, activeIpd: occupied, bedsAvailable, occupancy, present: presentToday, late: lateToday })
       setUpdatedAt(new Date().toLocaleString())
+
+      // Revenue split by payment method (cash vs card/bank) using finance transactions
+      try {
+        const txRes: any = await hospitalApi.listTransactions({ from: fromDate, to: toDate, type: 'All', limit: 5000 })
+        const txns: any[] = txRes?.transactions || txRes?.items || []
+        let cash = 0
+        let card = 0
+        for (const t of txns){
+          const refType = String(t?.refType || '').toLowerCase()
+          if (refType === 'expense' || refType === 'doctor_payout') continue
+
+          // Skip reversals/returns when identifiable
+          if (refType.includes('reversal')) continue
+
+          const method = String(t?.paymentMethod || t?.method || t?.payment_mode || 'other').toLowerCase()
+          const amtRaw = t?.fee ?? t?.totalAmount ?? t?.amount ?? 0
+          const amt = Number(amtRaw || 0)
+          if (!isFinite(amt) || amt <= 0) continue
+
+          if (method === 'cash') cash += amt
+          else if (method === 'bank' || method === 'card') card += amt
+          else card += amt
+        }
+        setRevByMethod({ cash, card })
+      } catch {
+        setRevByMethod({ cash: 0, card: 0 })
+      }
     } finally { setLoading(false) }
   }
 
@@ -224,7 +280,8 @@ export default function Hospital_Dashboard() {
   const doctorPayoutsCard = useMemo(()=> doctorPayoutsTotal>0 ? doctorPayoutsTotal : doctorPayouts, [doctorPayoutsTotal, doctorPayouts])
   // Salaries widget removed per request
 
-  const totalRevenue = useMemo(()=> opdRevenueAmt + ipdRevenueAmt, [opdRevenueAmt, ipdRevenueAmt])
+  const totalRevenue = useMemo(()=> opdRevenueAmt + ipdRevenueAmt + erRevenueAmt, [opdRevenueAmt, ipdRevenueAmt, erRevenueAmt])
+  const totalRevenueByMethod = useMemo(()=> revByMethod.cash + revByMethod.card, [revByMethod])
   const recentIpdPayments = useMemo(()=> {
     const getDate = (p:any)=> new Date(String(p.receivedAt||p.dateIso||p.date||p.createdAt||'') || 0).getTime()
     return [...ipdPayments].sort((a,b)=> getDate(b) - getDate(a)).slice(0, 10)
@@ -238,14 +295,61 @@ export default function Hospital_Dashboard() {
     { title: 'Discharges', value: String(stats.discharges), tone: 'bg-amber-50 border-amber-200', icon: CalendarClock },
     { title: 'Active IPD Patients', value: String(stats.activeIpd), tone: 'bg-sky-50 border-sky-200', icon: Users },
     { title: 'Beds Available', value: String(stats.bedsAvailable), tone: 'bg-cyan-50 border-cyan-200', icon: BedSingle },
+    { title: 'Cash Revenue', value: `Rs ${revByMethod.cash.toFixed(0)}`, tone: 'bg-green-50 border-green-200', icon: DollarSign },
+    { title: 'Card Revenue', value: `Rs ${revByMethod.card.toFixed(0)}`, tone: 'bg-green-50 border-green-200', icon: DollarSign },
+    { title: 'Total Revenue', value: `Rs ${totalRevenueByMethod.toFixed(0)}`, tone: 'bg-green-50 border-green-200', icon: DollarSign },
     { title: 'OPD Revenue', value: `Rs ${opdRevenueAmt.toFixed(0)}`, tone: 'bg-green-50 border-green-200', icon: DollarSign },
     { title: 'IPD Revenue', value: `Rs ${ipdRevenueAmt.toFixed(0)}`, tone: 'bg-green-50 border-green-200', icon: DollarSign },
-    { title: 'Total Revenue', value: `Rs ${totalRevenue.toFixed(0)}`, tone: 'bg-green-50 border-green-200', icon: DollarSign },
+    { title: 'ER Revenue', value: `Rs ${erRevenueAmt.toFixed(0)}`, tone: 'bg-green-50 border-green-200', icon: DollarSign },
+    { title: 'Corporate AR Balance', value: `Rs ${corporateArAmt.toFixed(0)}`, tone: 'bg-indigo-50 border-indigo-200', icon: DollarSign, onClick: () => setShowArModal(true), clickable: true },
+    { title: 'Total Revenue (TB)', value: `Rs ${totalRevenue.toFixed(0)}`, tone: 'bg-green-50 border-green-200', icon: DollarSign },
     { title: 'Expenses', value: `Rs ${expensesTotal.toFixed(0)}`, tone: 'bg-rose-50 border-rose-200', icon: DollarSign },
     { title: 'Doctor Payouts', value: `Rs ${doctorPayoutsCard.toFixed(0)}`, tone: 'bg-amber-50 border-amber-200', icon: DollarSign },
     { title: 'Staff Present (Today)', value: String(stats.present), tone: 'bg-yellow-50 border-yellow-200', icon: Users },
     { title: 'Late Staff (Today)', value: String(stats.late), tone: 'bg-slate-50 border-slate-200', icon: Clock },
   ]
+
+  // Department revenue cards - calculate OPD + IPD + ER revenue per department
+  const deptRevenueCards = useMemo(() => {
+    const byDept: Record<string, number> = {}
+    for (const d of departments) byDept[d.id] = 0
+
+    // OPD revenue from tokens (fee per department)
+    for (const t of tokens){
+      const depId = String(t?.departmentId?._id || t?.departmentId || '')
+      if (!depId) continue
+      const fee = Number(t?.fee || t?.amount || 0)
+      if (byDept[depId] == null) byDept[depId] = 0
+      byDept[depId] += fee
+    }
+
+    // IPD revenue from admissions (deposit + total billed per department)
+    for (const a of ipdAdmissions){
+      const depId = String(a?.departmentId?._id || a?.departmentId || '')
+      if (!depId) continue
+      const totalBill = Number(a?.totalBill || a?.totalAmount || a?.billTotal || 0)
+      const deposit = Number(a?.deposit || a?.totalPaid || 0)
+      const ipdRevenue = totalBill > 0 ? totalBill : deposit
+      if (byDept[depId] == null) byDept[depId] = 0
+      byDept[depId] += ipdRevenue
+    }
+
+    // ER revenue from transactions (distributed by department from finance journals)
+    for (const t of erTransactions){
+      const depId = String(t?.departmentId || '')
+      if (!depId) continue
+      const amount = Number(t?.fee || t?.totalAmount || 0)
+      if (byDept[depId] == null) byDept[depId] = 0
+      byDept[depId] += amount
+    }
+
+    return departments.map(d => ({
+      title: d.name,
+      value: `Rs ${(byDept[d.id] || 0).toFixed(0)}`,
+      tone: 'bg-white border-slate-200',
+      icon: DollarSign,
+    }))
+  }, [departments, tokens, ipdAdmissions, erTransactions])
 
   // Auto-refresh for real-time chart and widgets
   useEffect(()=>{
@@ -261,6 +365,12 @@ export default function Hospital_Dashboard() {
     }
     document.addEventListener('visibilitychange', onVis)
     return () => document.removeEventListener('visibilitychange', onVis)
+  }, [])
+
+  useEffect(()=>{
+    const onDeps = () => load()
+    try { window.addEventListener('hospital:departments:refresh', onDeps as any) } catch {}
+    return () => { try { window.removeEventListener('hospital:departments:refresh', onDeps as any) } catch {} }
   }, [])
 
   // Load shifts once for global filter (fallback to Lab if needed)
@@ -314,7 +424,7 @@ export default function Hospital_Dashboard() {
           <label className="flex items-center gap-2 text-sm"><span className="w-20 text-slate-600">Shift</span>
             <select value={filterShiftId} onChange={e=> setFilterShiftId(e.target.value)} className="input min-w-[160px]">
               <option value="">All day</option>
-              {shifts.map(s=> <option key={s.id} value={s.id}>{s.name} ({s.start}-{s.end})</option>)}
+              {shifts.map(s=> <option key={s.id} value={s.id}>{s.name} ({fmt12(s.start)}-{fmt12(s.end)})</option>)}
             </select>
           </label>
           <label className="flex items-center gap-2 text-sm"><span className="w-20 text-slate-600">From Time</span>
@@ -330,8 +440,12 @@ export default function Hospital_Dashboard() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {cards.map(({ title, value, tone, icon: Icon }) => (
-          <div key={title} className={`rounded-xl border ${tone} p-4`}>
+        {cards.map(({ title, value, tone, icon: Icon, onClick, clickable }) => (
+          <div 
+            key={title} 
+            className={`rounded-xl border ${tone} p-4 ${clickable ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+            onClick={onClick}
+          >
             <div className="flex items-start justify-between">
               <div>
                 <div className="text-sm text-slate-600">{title}</div>
@@ -344,6 +458,58 @@ export default function Hospital_Dashboard() {
           </div>
         ))}
       </div>
+
+      {corporateArItems.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="text-slate-800 font-semibold">Corporate AR by Company</div>
+            <button 
+              onClick={() => setShowArModal(true)}
+              className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+            >
+              View All →
+            </button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            {corporateArItems.slice(0, 8).map((item) => (
+              <div key={item.companyId} className="rounded-xl border bg-indigo-50/50 border-indigo-200 p-3">
+                <div className="flex items-start justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm text-slate-600 truncate" title={item.companyName}>{item.companyName}</div>
+                    <div className="mt-1 text-lg font-semibold text-slate-900">Rs {item.balance.toFixed(0)}</div>
+                    <div className="text-xs text-slate-500">Outstanding</div>
+                  </div>
+                  <div className="rounded-md bg-white/60 p-2 text-slate-700 shadow-sm flex-shrink-0">
+                    <DollarSign className="h-4 w-4" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {deptRevenueCards.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <div className="mb-3 text-slate-800 font-semibold">Departments Revenue</div>
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            {deptRevenueCards.map(({ title, value, tone, icon: Icon }) => (
+              <div key={title} className={`rounded-xl border ${tone} p-3`}>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="text-sm text-slate-600">{title}</div>
+                    <div className="mt-1 text-lg font-semibold text-slate-900">{value}</div>
+                    <div className="text-xs text-slate-500">Revenue</div>
+                  </div>
+                  <div className="rounded-md bg-slate-50 p-2 text-slate-700 shadow-sm">
+                    <Icon className="h-4 w-4" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -384,6 +550,57 @@ export default function Hospital_Dashboard() {
           <RefreshCw className={`h-3.5 w-3.5 ${loading?'animate-spin':''}`} /> Refresh
         </button>
       </div>
+
+      {/* Corporate AR Breakdown Modal */}
+      {showArModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setShowArModal(false)}>
+          <div className="w-full max-w-4xl max-h-[80vh] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+              <div className="font-semibold text-slate-800">Corporate AR Breakdown</div>
+              <button onClick={() => setShowArModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="max-h-[60vh] overflow-auto p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-sm text-slate-600">Total Outstanding AR:</div>
+                <div className="text-lg font-semibold text-slate-900">Rs {corporateArAmt.toFixed(0)}</div>
+              </div>
+              <div className="rounded-md border border-slate-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium text-slate-700">Company</th>
+                      <th className="px-4 py-2 text-right font-medium text-slate-700">Balance (Rs)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {corporateArItems.map((item) => (
+                      <tr key={item.companyId} className="hover:bg-slate-50">
+                        <td className="px-4 py-2 text-slate-800">{item.companyName}</td>
+                        <td className="px-4 py-2 text-right font-medium text-slate-900">{item.balance.toFixed(0)}</td>
+                      </tr>
+                    ))}
+                    {corporateArItems.length === 0 && (
+                      <tr>
+                        <td colSpan={2} className="px-4 py-4 text-center text-slate-500">No outstanding AR found.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="border-t border-slate-200 px-4 py-3 flex justify-end">
+              <button 
+                onClick={() => setShowArModal(false)}
+                className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { hospitalApi } from '../../utils/api'
 import { useNavigate } from 'react-router-dom'
+import Toast, { type ToastState } from '../../components/ui/Toast'
 
 type Row = {
   id: string
@@ -25,6 +26,7 @@ export default function Hospital_PatientList() {
   const [rowsPerPage, setRowsPerPage] = useState(20)
   const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(false)
+  const [toast, setToast] = useState<ToastState>(null)
 
   useEffect(()=>{ load() }, [])
   async function load(){
@@ -54,7 +56,7 @@ export default function Hospital_PatientList() {
   }, [q, rows])
 
   async function discharge(id: string){
-    try { await hospitalApi.dischargeIPD(id); await load() } catch (e: any){ alert(e?.message || 'Failed') }
+    try { await hospitalApi.dischargeIPD(id); await load() } catch (e: any){ setToast({ type: 'error', message: e?.message || 'Failed' }) }
   }
 
   // Transfer bed modal state
@@ -82,7 +84,7 @@ export default function Hospital_PatientList() {
       setTransferEncounterId(null)
       await load()
     } catch (err: any){
-      alert(err?.message || 'Failed to transfer bed')
+      setToast({ type: 'error', message: err?.message || 'Failed to transfer bed' })
     }
   }
 
@@ -169,6 +171,7 @@ export default function Hospital_PatientList() {
           </form>
         </div>
       )}
+      <Toast toast={toast} onClose={()=>setToast(null)} />
     </div>
   )
 }

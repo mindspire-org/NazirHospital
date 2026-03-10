@@ -244,7 +244,7 @@ export async function buildRxVitalsLeft(data: PrescriptionPdfData){
   try { pdf.setFont('Poppins', 'bold') } catch { pdf.setFont('helvetica','bold') }
   pdf.setFontSize(24)
   pdf.setTextColor(59, 130, 246)
-  pdf.text('R', rxX + 8, rxY + 18)
+  pdf.text('Rx', rxX + 8, rxY + 18)
   pdf.setTextColor(0, 0, 0)
 
   // Modern Rx content area

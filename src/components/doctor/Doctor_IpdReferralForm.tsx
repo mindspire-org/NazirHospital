@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, forwardRef, useImperativeHandle } from 'react'
 import { hospitalApi, labApi } from '../../utils/api'
+import Toast, { type ToastState } from '../ui/Toast'
 
 type Props = {
   mrn?: string
@@ -13,6 +14,7 @@ export default forwardRef(function Doctor_IpdReferralForm({ mrn, doctor, onSaved
   const [patient, setPatient] = useState<any | null>(null)
   const [deps, setDeps] = useState<any[]>([])
   const [docs, setDocs] = useState<any[]>([])
+  const [toast, setToast] = useState<ToastState>(null)
 
   const [form, setForm] = useState({
     referralDate: new Date().toISOString().slice(0,10),
@@ -98,7 +100,7 @@ export default forwardRef(function Doctor_IpdReferralForm({ mrn, doctor, onSaved
   }), [deps, docs, form, patient, patientAge, doctor?.name, mrn])
 
   async function save(){
-    if (!patient?._id) { alert('Patient not found'); return }
+    if (!patient?._id) { setToast({ type: 'error', message: 'Patient not found' }); return }
     setSaving(true)
     try{
       const isHex24 = (s?: string) => !!s && /^[a-f\d]{24}$/i.test(s)
@@ -126,7 +128,7 @@ export default forwardRef(function Doctor_IpdReferralForm({ mrn, doctor, onSaved
       const id = res?.referral?._id || res?.id
       if (!res || res.error){ throw new Error(res?.error || 'Failed') }
       onSaved?.(id)
-      alert('Referral saved')
+      setToast({ type: 'success', message: 'Referral saved' })
     }catch(e:any){
       try{
         const key = 'hospital.ipd.referrals'
@@ -163,8 +165,8 @@ export default forwardRef(function Doctor_IpdReferralForm({ mrn, doctor, onSaved
         }
         localStorage.setItem(key, JSON.stringify([item, ...arr]))
         onSaved?.(id)
-        alert(`Failed to save on server: ${e?.message || 'Unknown error'}. Referral saved locally.`)
-      }catch(e:any){ alert(e?.message || 'Failed to save') }
+        setToast({ type: 'info', message: `Failed to save on server: ${e?.message || 'Unknown error'}. Referral saved locally.` })
+      }catch(e:any){ setToast({ type: 'error', message: e?.message || 'Failed to save' }) }
     }finally{ setSaving(false) }
   }
 
@@ -239,6 +241,8 @@ export default forwardRef(function Doctor_IpdReferralForm({ mrn, doctor, onSaved
 
       {loading && <div className="mt-2 text-sm text-slate-500">Loading patient…</div>}
       {!patient && !loading && mrn && <div className="mt-2 text-sm text-rose-600">No patient found for MRN: {mrn}</div>}
+
+      <Toast toast={toast} onClose={()=>setToast(null)} />
     </div>
   )
 })

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { hospitalApi } from '../../utils/api'
+import Toast, { type ToastState } from '../../components/ui/Toast'
 
 type Department = {
   id: string
@@ -20,6 +21,7 @@ export default function Hospital_Departments() {
   const [editId, setEditId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState({ name: '', description: '', baseFee: '', doctorFees: [] as Array<{ doctorId: string; price: string }> })
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [toast, setToast] = useState<ToastState>(null)
 
   type DoctorLite = { id: string; name: string }
   const [doctors, setDoctors] = useState<DoctorLite[]>([])
@@ -81,8 +83,10 @@ export default function Hospital_Departments() {
       })) as Department[]
       setItems(departments)
       setShowAdd(false)
+      try { window.dispatchEvent(new CustomEvent('hospital:departments:refresh')) } catch {}
+      setToast({ type: 'success', message: 'Saved' })
     } catch (err: any) {
-      alert(err?.message || 'Failed to save')
+      setToast({ type: 'error', message: err?.message || 'Failed to save' })
     }
   }
 
@@ -112,8 +116,10 @@ export default function Hospital_Departments() {
       })) as Department[]
       setItems(departments)
       setEditId(null)
+      try { window.dispatchEvent(new CustomEvent('hospital:departments:refresh')) } catch {}
+      setToast({ type: 'success', message: 'Updated' })
     } catch (err: any) {
-      alert(err?.message || 'Failed to update')
+      setToast({ type: 'error', message: err?.message || 'Failed to update' })
     }
   }
 
@@ -135,8 +141,9 @@ export default function Hospital_Departments() {
         })) as Department[]
         setItems(departments)
         setDeleteId(null)
+        try { window.dispatchEvent(new CustomEvent('hospital:departments:refresh')) } catch {}
       } catch (err: any) {
-        alert(err?.message || 'Failed to delete')
+        setToast({ type: 'error', message: err?.message || 'Failed to delete' })
       }
     })()
   }
@@ -294,7 +301,7 @@ export default function Hospital_Departments() {
 
       {/* Delete Modal */}
       {deleteId && (
-        <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/30 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-5 shadow-lg">
             <h3 className="text-base font-semibold text-slate-800">Delete Department</h3>
             <p className="mt-2 text-sm text-slate-600">Are you sure you want to delete this department? This action cannot be undone.</p>
@@ -305,6 +312,8 @@ export default function Hospital_Departments() {
           </div>
         </div>
       )}
+
+      <Toast toast={toast} onClose={()=>setToast(null)} />
     </div>
   )
 }

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Eye, Pencil, Printer, Trash2 } from 'lucide-react'
 import { diagnosticApi } from '../../utils/api'
 import Diagnostic_TokenSlip from '../../components/diagnostic/Diagnostic_TokenSlip'
 import Diagnostic_EditSampleDialog from '../../components/diagnostic/Diagnostic_EditSampleDialog'
 import type { DiagnosticTokenSlipData } from '../../components/diagnostic/Diagnostic_TokenSlip'
+import { Building2, Wallet, DollarSign, Printer, Pencil, Trash2, RotateCcw } from 'lucide-react'
 
 type Order = {
   id: string
@@ -18,16 +18,17 @@ type Order = {
   subtotal?: number
   discount?: number
   net?: number
+  receivedAmount?: number
+  receivableAmount?: number
+  corporateId?: string
+  corporateName?: string
+  billingType?: 'cash' | 'corporate'
 }
 
 type Test = { id: string; name: string; price?: number }
 
-function formatDate(iso: string) {
-  const d = new Date(iso); return d.toLocaleDateString()
-}
-
-function formatTime(iso: string) {
-  const d = new Date(iso); return d.toLocaleTimeString()
+function formatDateTime(iso: string) {
+  const d = new Date(iso); return d.toLocaleDateString() + ', ' + d.toLocaleTimeString()
 }
 
 export default function Diagnostic_SampleTracking(){
@@ -58,7 +59,23 @@ export default function Diagnostic_SampleTracking(){
       // Do not exclude orders with some returned items when viewing 'received' or 'all'
       const st = (status==='all' || status==='received') ? undefined : status
       const res = await diagnosticApi.listOrders({ q: q || undefined, from: from || undefined, to: to || undefined, status: st as any, page, limit: rows }) as any
-      const items: Order[] = (res.items||[]).map((x:any)=>({ id: String(x._id), createdAt: x.createdAt || new Date().toISOString(), patient: x.patient || { fullName: '-', phone: '' }, tests: x.tests || [], items: x.items || [], status: x.status || 'received', tokenNo: x.tokenNo, sampleTime: x.sampleTime, subtotal: Number(x.subtotal||0), discount: Number(x.discount||0), net: Number(x.net||0) }))
+      const items: Order[] = (res.items||[]).map((x:any)=>({ 
+        id: String(x._id), 
+        createdAt: x.createdAt || new Date().toISOString(), 
+        patient: x.patient || { fullName: '-', phone: '' }, 
+        tests: x.tests || [], 
+        items: x.items || [], 
+        status: x.status || 'received', 
+        tokenNo: x.tokenNo, 
+        sampleTime: x.sampleTime, 
+        subtotal: Number(x.subtotal||0), 
+        discount: Number(x.discount||0), 
+        net: Number(x.net||0),
+        receivedAmount: Number(x.receivedAmount||0),
+        receivableAmount: Number(x.receivableAmount||0),
+        corporateId: x.corporateId,
+        billingType: x.corporateId ? 'corporate' : 'cash'
+      }))
       if (mounted){ setOrders(items); setTotal(Number(res.total||items.length||0)); setTotalPages(Number(res.totalPages||1)) }
     } catch (e){ if (mounted){ setOrders([]); setTotal(0); setTotalPages(1) } }
   })(); return ()=>{ mounted = false } }, [q, from, to, status, page, rows])
@@ -69,22 +86,15 @@ export default function Diagnostic_SampleTracking(){
   const end = Math.min((curPage - 1) * rows + orders.length, total)
 
   // Per-test update handlers
-  const setSampleTimeForItem = async (orderId: string, testId: string, t: string) => {
-    try { await diagnosticApi.updateOrderItemTrack(orderId, testId, { sampleTime: t }) } catch {}
+  // @ts-expect-error unused function kept for future use
+  const setSampleTimeForItem = (orderId: string, testId: string, time: string) => {
     setOrders(prev => prev.map(o => {
       if (o.id !== orderId) return o
-      const items = (o.items||[])
-      const idx = items.findIndex(i => i.testId===testId)
-      if (idx>=0){ const copy = items.slice(); copy[idx] = { ...copy[idx], sampleTime: t }; return { ...o, items: copy } }
-      return { ...o, items: [ ...(o.items||[]), { testId, status: 'received', sampleTime: t } ] }
+      return { ...o, items: (o.items || []).map(it => it.testId === testId ? { ...it, sampleTime: time } : it) }
     }))
   }
   const setStatusForItem = async (orderId: string, testId: string, s: 'received'|'completed'|'returned') => {
-    let ok = false
-    try {
-      await diagnosticApi.updateOrderItemTrack(orderId, testId, { status: s })
-      ok = true
-    } catch {}
+    try { await diagnosticApi.updateOrderItemTrack(orderId, testId, { status: s }) } catch {}
     setOrders(prev => prev.map(o => {
       if (o.id !== orderId) return o
       const items = (o.items||[])
@@ -92,11 +102,6 @@ export default function Diagnostic_SampleTracking(){
       if (idx>=0){ const copy = items.slice(); copy[idx] = { ...copy[idx], status: s }; return { ...o, items: copy } }
       return { ...o, items: [ ...(o.items||[]), { testId, status: s } ] }
     }))
-
-    if (ok && s === 'completed') {
-      setNotice({ text: 'Marked completed. You can enter results in Result Entry.', kind: 'success' })
-      try { setTimeout(()=> setNotice(null), 2500) } catch {}
-    }
   }
   const requestDeleteItem = async (orderId: string, testId: string) => {
     if (!confirm('Delete this test from the order?')) return
@@ -123,9 +128,6 @@ export default function Diagnostic_SampleTracking(){
   // Print Slip
   const [slipOpen, setSlipOpen] = useState(false)
   const [slipData, setSlipData] = useState<DiagnosticTokenSlipData | null>(null)
-  // View Details Dialog
-  const [detailsOpen, setDetailsOpen] = useState(false)
-  const [detailsOrder, setDetailsOrder] = useState<Order | null>(null)
   // Edit Sample Dialog
   const [editOpen, setEditOpen] = useState(false)
   const [editOrder, setEditOrder] = useState<{ id: string; patient: any; tests: string[] } | null>(null)
@@ -162,44 +164,145 @@ export default function Diagnostic_SampleTracking(){
     setSlipData(data); setSlipOpen(true)
   }
 
-  const openDetails = (o: Order) => {
-    setDetailsOrder(o)
-    setDetailsOpen(true)
+  // Receive Payment Dialog
+  const [receiveOpen, setReceiveOpen] = useState(false)
+  const [receiveOrder, setReceiveOrder] = useState<Order | null>(null)
+  const [receiveAmount, setReceiveAmount] = useState('')
+  const [receiveMethod, setReceiveMethod] = useState('cash')
+  const [receiveNote, setReceiveNote] = useState('')
+
+  function openReceivePayment(o: Order) {
+    setReceiveOrder(o)
+    setReceiveAmount(String(o.receivableAmount || 0))
+    setReceiveMethod('cash')
+    setReceiveNote('')
+    setReceiveOpen(true)
+  }
+
+  async function submitReceivePayment() {
+    if (!receiveOrder?.tokenNo) return
+    const amount = Number(receiveAmount) || 0
+    if (amount <= 0) {
+      setNotice({ text: 'Amount must be greater than 0', kind: 'error' })
+      return
+    }
+    try {
+      const res = await diagnosticApi.receivePayment(receiveOrder.tokenNo, {
+        amount,
+        method: receiveMethod,
+        note: receiveNote || undefined
+      }) as any
+      // Update local orders state
+      setOrders(prev => prev.map(o => {
+        if (o.tokenNo !== receiveOrder.tokenNo) return o
+        return {
+          ...o,
+          receivedAmount: res?.receivedAmount ?? o.receivedAmount,
+          receivableAmount: res?.receivableAmount ?? o.receivableAmount
+        }
+      }))
+      setNotice({ text: 'Payment received successfully', kind: 'success' })
+      setReceiveOpen(false)
+    } catch (e: any) {
+      setNotice({ text: e?.message || 'Failed to receive payment', kind: 'error' })
+    } finally {
+      setTimeout(() => setNotice(null), 3000)
+    }
+  }
+
+  // Return Dialog
+  const [returnOpen, setReturnOpen] = useState(false)
+  const [returnOrder, setReturnOrder] = useState<Order | null>(null)
+  const [returnReason, setReturnReason] = useState('')
+  const [returnAmount, setReturnAmount] = useState('')
+
+  function openReturnDialog(o: Order) {
+    setReturnOrder(o)
+    setReturnReason('')
+    setReturnAmount(String(o.receivedAmount || 0))
+    setReturnOpen(true)
+  }
+
+  async function submitReturn() {
+    if (!returnOrder) return
+    const amount = Number(returnAmount) || 0
+    if (amount <= 0) {
+      setNotice({ text: 'Return amount must be greater than 0', kind: 'error' })
+      return
+    }
+    if (amount > (returnOrder.receivedAmount || 0)) {
+      setNotice({ text: 'Return amount cannot exceed received amount', kind: 'error' })
+      return
+    }
+    try {
+      const res = await diagnosticApi.returnOrder(returnOrder.id, {
+        reason: returnReason || undefined,
+        amount
+      }) as any
+      // Update local orders state
+      setOrders(prev => prev.map(o => {
+        if (o.id !== returnOrder.id) return o
+        return {
+          ...o,
+          status: 'returned',
+          net: res?.order?.net ?? o.net,
+          receivedAmount: res?.order?.receivedAmount ?? o.receivedAmount,
+          receivableAmount: res?.order?.receivableAmount ?? o.receivableAmount
+        }
+      }))
+      setNotice({ text: `Order returned - Amount refunded: PKR ${amount.toLocaleString()}`, kind: 'success' })
+      setReturnOpen(false)
+    } catch (e: any) {
+      setNotice({ text: e?.message || 'Failed to return order', kind: 'error' })
+    } finally {
+      setTimeout(() => setNotice(null), 3000)
+    }
+  }
+
+  async function undoReturn(o: Order) {
+    if (!confirm('Undo the return for this order? This will restore the original amounts.')) return
+    try {
+      const res = await diagnosticApi.undoReturn(o.id) as any
+      // Update local orders state
+      setOrders(prev => prev.map(order => {
+        if (order.id !== o.id) return order
+        return {
+          ...order,
+          status: 'received',
+          net: res?.order?.net ?? order.net,
+          receivedAmount: res?.order?.receivedAmount ?? order.receivedAmount,
+          receivableAmount: res?.order?.receivableAmount ?? order.receivableAmount
+        }
+      }))
+      setNotice({ text: `Return undone - Amount restored: PKR ${res?.restoredAmount?.toLocaleString() || 0}`, kind: 'success' })
+    } catch (e: any) {
+      setNotice({ text: e?.message || 'Failed to undo return', kind: 'error' })
+    } finally {
+      setTimeout(() => setNotice(null), 3000)
+    }
   }
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="space-y-4">
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <div className="text-2xl font-bold text-slate-900">Sample Tracking</div>
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="min-w-0 w-full">
-            <label className="mb-1 block text-xs text-slate-500">Search</label>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="min-w-[260px] flex-1">
             <input value={q} onChange={e=>{ setQ(e.target.value); setPage(1) }} placeholder="Search by token, patient, or test..." className="w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200" />
           </div>
-          <div className="min-w-0 w-full">
-            <label className="mb-1 block text-xs text-slate-500">From</label>
-            <input type="date" value={from} onChange={e=>{ setFrom(e.target.value); setPage(1) }} className="w-full rounded-md border border-slate-300 px-2 py-2 text-sm" />
+          <div className="flex items-center gap-2 text-sm">
+            <input type="date" value={from} onChange={e=>{ setFrom(e.target.value); setPage(1) }} className="rounded-md border border-slate-300 px-2 py-1" />
+            <input type="date" value={to} onChange={e=>{ setTo(e.target.value); setPage(1) }} className="rounded-md border border-slate-300 px-2 py-1" />
           </div>
-          <div className="min-w-0 w-full">
-            <label className="mb-1 block text-xs text-slate-500">To</label>
-            <input type="date" value={to} onChange={e=>{ setTo(e.target.value); setPage(1) }} className="w-full rounded-md border border-slate-300 px-2 py-2 text-sm" />
+          <div className="flex items-center gap-1 text-sm">
+            <button onClick={()=>setStatus('all')} className={`rounded-md px-3 py-1.5 border ${status==='all'?'bg-slate-900 text-white border-slate-900':'border-slate-300 text-slate-700'}`}>All</button>
+            <button onClick={()=>setStatus('received')} className={`rounded-md px-3 py-1.5 border ${status==='received'?'bg-slate-900 text-white border-slate-900':'border-slate-300 text-slate-700'}`}>Received</button>
+            <button onClick={()=>setStatus('completed')} className={`rounded-md px-3 py-1.5 border ${status==='completed'?'bg-slate-900 text-white border-slate-900':'border-slate-300 text-slate-700'}`}>Completed</button>
+            <button onClick={()=>setStatus('returned')} className={`rounded-md px-3 py-1.5 border ${status==='returned'?'bg-slate-900 text-white border-slate-900':'border-slate-300 text-slate-700'}`}>Returned</button>
           </div>
-          <div className="min-w-0 w-full">
-            <label className="mb-1 block text-xs text-slate-500">Status</label>
-            <select
-              value={status}
-              onChange={e => { setStatus(e.target.value as any); setPage(1) }}
-              className="w-full rounded-md border border-slate-300 px-2 py-2 text-sm"
-            >
-              <option value="all">All</option>
-              <option value="received">Received</option>
-              <option value="completed">Completed</option>
-              <option value="returned">Returned</option>
-            </select>
-          </div>
-          <div className="min-w-0 w-full">
-            <label className="mb-1 block text-xs text-slate-500">Rows</label>
-            <select value={rows} onChange={e=>{ setRows(Number(e.target.value)); setPage(1) }} className="w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
+          <div className="ml-auto flex items-center gap-2 text-sm">
+            <span>Rows</span>
+            <select value={rows} onChange={e=>{ setRows(Number(e.target.value)); setPage(1) }} className="rounded-md border border-slate-300 px-2 py-1">
               <option value={10}>10</option>
               <option value={20}>20</option>
               <option value={50}>50</option>
@@ -211,19 +314,20 @@ export default function Diagnostic_SampleTracking(){
         )}
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-sm">
           <thead className="border-b border-slate-200 bg-slate-50 text-left text-slate-600">
             <tr>
-              <th className="px-2 py-2 lg:px-4">DateTime</th>
-              <th className="px-2 py-2 lg:px-4">Patient</th>
-              <th className="px-2 py-2 lg:px-4">Token No</th>
-              <th className="px-2 py-2 lg:px-4">Test(s)</th>
-              <th className="hidden px-2 py-2 lg:px-4 md:table-cell">MR No</th>
-              <th className="hidden px-2 py-2 lg:px-4 lg:table-cell">Phone</th>
-              <th className="hidden px-2 py-2 lg:px-4 sm:table-cell">Sample Time</th>
-              <th className="px-2 py-2 lg:px-4">Status</th>
-              <th className="px-2 py-2 lg:px-4">Actions</th>
+              <th className="px-4 py-2">Date</th>
+              <th className="px-4 py-2">Patient</th>
+              <th className="px-4 py-2">Token No</th>
+              <th className="px-4 py-2">Test(s)</th>
+              <th className="px-4 py-2">Billing</th>
+              <th className="px-4 py-2">Net</th>
+              <th className="px-4 py-2">Received</th>
+              <th className="px-4 py-2">Pending</th>
+              <th className="px-4 py-2">Status</th>
+              <th className="px-4 py-2">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -233,61 +337,90 @@ export default function Diagnostic_SampleTracking(){
                 const tname = testsMap[tid] || '—'
                 const item = (o.items||[]).find(i=> i.testId===tid)
                 const rowStatus = item?.status || o.status
-                const sampleTime = item?.sampleTime || o.sampleTime || ''
                 acc.push(
                   <tr key={`${o.id}-${tid}-${idx}`} className="border-b border-slate-100">
-                    <td className="px-2 py-2 lg:px-4 whitespace-nowrap">
-                      <div className="leading-tight">
-                        <div>{formatDate(o.createdAt)}</div>
-                        <div className="text-xs text-slate-500">{formatTime(o.createdAt)}</div>
-                      </div>
+                    <td className="px-4 py-2 whitespace-nowrap">{formatDateTime(o.createdAt)}</td>
+                    <td className="px-4 py-2 whitespace-nowrap">{o.patient.fullName}</td>
+                    <td className="px-4 py-2 whitespace-nowrap">{token}</td>
+                    <td className="px-4 py-2">{tname}</td>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      {o.billingType === 'corporate' ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-xs text-violet-700">
+                          <Building2 className="h-3 w-3" />
+                          Corporate
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                          <Wallet className="h-3 w-3" />
+                          Cash
+                        </span>
+                      )}
                     </td>
-                    <td className="px-2 py-2 lg:px-4 whitespace-nowrap">{o.patient.fullName}</td>
-                    <td className="px-2 py-2 lg:px-4 whitespace-nowrap">{token}</td>
-                    <td className="px-2 py-2 lg:px-4">{tname}</td>
-                    <td className="hidden px-2 py-2 lg:px-4 whitespace-nowrap md:table-cell">{o.patient.mrn || '-'}</td>
-                    <td className="hidden px-2 py-2 lg:px-4 whitespace-nowrap lg:table-cell">{o.patient.phone || '-'}</td>
-                    <td className="hidden px-2 py-2 lg:px-4 whitespace-nowrap sm:table-cell">
-                      <input type="time" value={sampleTime} onChange={e=>setSampleTimeForItem(o.id, String(tid), e.target.value)} className="rounded-md border border-slate-300 px-2 py-1" />
-                     </td>
-                    <td className="px-2 py-2 lg:px-4 whitespace-nowrap">
+                    <td className="px-4 py-2 whitespace-nowrap">PKR {Number(o.net || 0).toLocaleString()}</td>
+                    <td className="px-4 py-2 whitespace-nowrap">PKR {Number(o.receivedAmount || 0).toLocaleString()}</td>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      {o.billingType === 'corporate' ? (
+                        <span className="text-slate-400">—</span>
+                      ) : (
+                        <span className={Number(o.receivableAmount || 0) > 0 ? 'text-amber-600 font-medium' : 'text-emerald-600'}>
+                          PKR {Number(o.receivableAmount || 0).toLocaleString()}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap">
                       <select value={rowStatus} onChange={e=> setStatusForItem(o.id, String(tid), e.target.value as any)} className="rounded-md border border-slate-300 px-2 py-1 text-xs">
                         <option value="received">received</option>
                         <option value="completed">completed</option>
                         <option value="returned">returned</option>
                       </select>
                     </td>
-                    <td className="px-2 py-2 lg:px-4 whitespace-nowrap">
-                      <div className="flex flex-wrap items-center gap-2">
+                    <td className="px-4 py-2">
+                      <div className="flex items-center gap-2">
                         <button
-                          type="button"
-                          title="View Details"
-                          onClick={()=>openDetails(o)}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50 sm:h-8 sm:w-8"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
+                          onClick={() => printToken(o)}
+                          className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                           title="Print Token"
-                          onClick={()=>printToken(o)}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50 sm:h-8 sm:w-8"
                         >
                           <Printer className="h-4 w-4" />
                         </button>
                         <button
-                          type="button"
+                          onClick={() => openEdit(o)}
+                          className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                           title="Edit Sample"
-                          onClick={()=> openEdit(o)}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50 sm:h-8 sm:w-8"
                         >
                           <Pencil className="h-4 w-4" />
                         </button>
+                        {o.billingType !== 'corporate' && Number(o.receivableAmount || 0) > 0 && (
+                          <button
+                            onClick={() => openReceivePayment(o)}
+                            className="rounded-md p-1.5 text-amber-600 hover:bg-amber-50 hover:text-amber-700"
+                            title="Receive Payment"
+                          >
+                            <DollarSign className="h-4 w-4" />
+                          </button>
+                        )}
+                        {o.status !== 'returned' && Number(o.receivedAmount || 0) > 0 && (
+                          <button
+                            onClick={() => openReturnDialog(o)}
+                            className="rounded-md p-1.5 text-orange-600 hover:bg-orange-50 hover:text-orange-700"
+                            title="Return Order"
+                          >
+                            <span className="text-xs font-bold">RET</span>
+                          </button>
+                        )}
+                        {o.status === 'returned' && (
+                          <button
+                            onClick={() => undoReturn(o)}
+                            className="rounded-md p-1.5 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                            title="Undo Return"
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </button>
+                        )}
                         <button
-                          type="button"
+                          onClick={() => requestDeleteItem(o.id, String(tid))}
+                          className="rounded-md p-1.5 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
                           title="Delete Test"
-                          onClick={()=>requestDeleteItem(o.id, String(tid))}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-rose-300 text-rose-700 hover:bg-rose-50 sm:h-8 sm:w-8"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -317,71 +450,6 @@ export default function Diagnostic_SampleTracking(){
       {slipOpen && slipData && (
         <Diagnostic_TokenSlip open={slipOpen} onClose={()=>setSlipOpen(false)} data={slipData} />
       )}
-      {detailsOpen && detailsOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-2xl ring-1 ring-black/5">
-            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-3">
-              <div>
-                <div className="text-base font-semibold text-slate-800">Order Details</div>
-                <div className="text-xs text-slate-500">Token: {detailsOrder.tokenNo || '-'} • {formatDate(detailsOrder.createdAt)} {formatTime(detailsOrder.createdAt)}</div>
-              </div>
-              <button onClick={()=>setDetailsOpen(false)} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm">Close</button>
-            </div>
-
-            <div className="space-y-4 p-5">
-              <section className="rounded-lg border border-slate-200 p-4">
-                <div className="text-sm font-semibold text-slate-800">Patient Details</div>
-                <div className="mt-2 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-                  <div className="flex items-start justify-between gap-2"><div className="text-slate-500">Name</div><div className="text-right text-slate-800">{detailsOrder.patient?.fullName || '-'}</div></div>
-                  <div className="flex items-start justify-between gap-2"><div className="text-slate-500">Phone</div><div className="text-right text-slate-800">{detailsOrder.patient?.phone || '-'}</div></div>
-                  <div className="flex items-start justify-between gap-2"><div className="text-slate-500">MR No</div><div className="text-right text-slate-800">{detailsOrder.patient?.mrn || '-'}</div></div>
-                  <div className="flex items-start justify-between gap-2"><div className="text-slate-500">CNIC</div><div className="text-right text-slate-800">{(detailsOrder.patient as any)?.cnic || '-'}</div></div>
-                  <div className="flex items-start justify-between gap-2"><div className="text-slate-500">Guardian</div><div className="text-right text-slate-800">{(detailsOrder.patient as any)?.guardianName || (detailsOrder.patient as any)?.fatherName || '-'}</div></div>
-                </div>
-              </section>
-
-              <section className="rounded-lg border border-slate-200 p-4">
-                <div className="text-sm font-semibold text-slate-800">Token Details</div>
-                <div className="mt-2 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-                  <div className="flex items-start justify-between gap-2"><div className="text-slate-500">Token No</div><div className="text-right font-semibold text-slate-900">{detailsOrder.tokenNo || '-'}</div></div>
-                  <div className="flex items-start justify-between gap-2"><div className="text-slate-500">Status</div><div className="text-right text-slate-800">{detailsOrder.status || '-'}</div></div>
-                  <div className="flex items-start justify-between gap-2"><div className="text-slate-500">Created</div><div className="text-right text-slate-800">{formatDate(detailsOrder.createdAt)} {formatTime(detailsOrder.createdAt)}</div></div>
-                  <div className="flex items-start justify-between gap-2"><div className="text-slate-500">Sample Time</div><div className="text-right text-slate-800">{detailsOrder.sampleTime || '-'}</div></div>
-                </div>
-              </section>
-
-              <section className="rounded-lg border border-slate-200 p-4">
-                <div className="text-sm font-semibold text-slate-800">Test Details</div>
-                <div className="mt-2 overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="text-left text-slate-500">
-                      <tr>
-                        <th className="py-2">Test</th>
-                        <th className="py-2">Sample Time</th>
-                        <th className="py-2">Reporting Time</th>
-                        <th className="py-2">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      {(detailsOrder.tests || []).map((tid, i) => {
-                        const item = (detailsOrder.items || []).find(x => String(x.testId) === String(tid)) as any
-                        return (
-                          <tr key={`${detailsOrder.id}-${tid}-${i}`}>
-                            <td className="py-2 pr-3 text-slate-800">{testsMap[tid] || tid}</td>
-                            <td className="py-2 pr-3 text-slate-700">{item?.sampleTime || '-'}</td>
-                            <td className="py-2 pr-3 text-slate-700">{item?.reportingTime || '-'}</td>
-                            <td className="py-2 text-slate-700">{item?.status || detailsOrder.status || '-'}</td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            </div>
-          </div>
-        </div>
-      )}
       {editOpen && editOrder && (
         <Diagnostic_EditSampleDialog
           open={editOpen}
@@ -389,6 +457,163 @@ export default function Diagnostic_SampleTracking(){
           order={editOrder}
           onSaved={onEditSaved}
         />
+      )}
+
+      {/* Receive Payment Dialog */}
+      {receiveOpen && receiveOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-900">Receive Payment</h3>
+              <button onClick={() => setReceiveOpen(false)} className="text-slate-400 hover:text-slate-600">×</button>
+            </div>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                  <div className="text-xs text-slate-500">Token No</div>
+                  <div className="font-medium text-slate-900">{receiveOrder.tokenNo}</div>
+                </div>
+                <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                  <div className="text-xs text-slate-500">Patient</div>
+                  <div className="font-medium text-slate-900">{receiveOrder.patient.fullName}</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                  <div className="text-xs text-slate-500">Net Amount</div>
+                  <div className="font-medium text-slate-900">PKR {Number(receiveOrder.net || 0).toLocaleString()}</div>
+                </div>
+                <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                  <div className="text-xs text-slate-500">Already Received</div>
+                  <div className="font-medium text-slate-900">PKR {Number(receiveOrder.receivedAmount || 0).toLocaleString()}</div>
+                </div>
+              </div>
+              <div className="rounded-lg border border-amber-100 bg-amber-50 p-3">
+                <div className="text-xs text-amber-600">Pending Amount</div>
+                <div className="text-lg font-semibold text-amber-700">PKR {Number(receiveOrder.receivableAmount || 0).toLocaleString()}</div>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Receive Amount</label>
+                <input
+                  type="number"
+                  value={receiveAmount}
+                  onChange={e => setReceiveAmount(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                  placeholder="Enter amount"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Payment Method</label>
+                <select
+                  value={receiveMethod}
+                  onChange={e => setReceiveMethod(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                >
+                  <option value="cash">Cash</option>
+                  <option value="card">Card</option>
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="easypaisa">Easypaisa</option>
+                  <option value="jazzcash">JazzCash</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Note (optional)</label>
+                <input
+                  type="text"
+                  value={receiveNote}
+                  onChange={e => setReceiveNote(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                  placeholder="Add a note..."
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => setReceiveOpen(false)}
+                  className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={submitReceivePayment}
+                  className="flex-1 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+                >
+                  Confirm Payment
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Return Dialog */}
+      {returnOpen && returnOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-900">Return Order</h3>
+              <button onClick={() => setReturnOpen(false)} className="text-slate-400 hover:text-slate-600">×</button>
+            </div>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                  <div className="text-xs text-slate-500">Token No</div>
+                  <div className="font-medium text-slate-900">{returnOrder.tokenNo}</div>
+                </div>
+                <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                  <div className="text-xs text-slate-500">Patient</div>
+                  <div className="font-medium text-slate-900">{returnOrder.patient.fullName}</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                  <div className="text-xs text-slate-500">Net Amount</div>
+                  <div className="font-medium text-slate-900">PKR {Number(returnOrder.net || 0).toLocaleString()}</div>
+                </div>
+                <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                  <div className="text-xs text-slate-500">Received Amount</div>
+                  <div className="font-medium text-slate-900">PKR {Number(returnOrder.receivedAmount || 0).toLocaleString()}</div>
+                </div>
+              </div>
+              <div className="rounded-lg border border-orange-100 bg-orange-50 p-3">
+                <div className="text-xs text-orange-600">Max Return Amount</div>
+                <div className="text-lg font-semibold text-orange-700">PKR {Number(returnOrder.receivedAmount || 0).toLocaleString()}</div>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Return Amount</label>
+                <input
+                  type="number"
+                  value={returnAmount}
+                  onChange={e => setReturnAmount(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+                  placeholder="Enter amount"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Reason (optional)</label>
+                <input
+                  type="text"
+                  value={returnReason}
+                  onChange={e => setReturnReason(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+                  placeholder="Enter reason for return..."
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => setReturnOpen(false)}
+                  className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={submitReturn}
+                  className="flex-1 rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700"
+                >
+                  Confirm Return
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

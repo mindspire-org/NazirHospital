@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { hospitalApi, labApi } from '../../utils/api'
+import Toast from '../../components/ui/Toast'
 
 export default function Pharmacy_PrescriptionIntake(){
   const { id } = useParams()
@@ -9,6 +10,7 @@ export default function Pharmacy_PrescriptionIntake(){
   const [error, setError] = useState<string>('')
   const [header, setHeader] = useState<{ patient?: string; mrn?: string; doctor?: string; date?: string } | null>(null)
   const [items, setItems] = useState<Array<{ name: string; frequency?: string; duration?: string; qty: number }>>([])
+  const [toast, setToast] = useState<{type: 'success'|'error', message: string} | null>(null)
 
   useEffect(() => { (async () => {
     if (!id) { setError('Missing id'); setLoading(false); return }
@@ -46,9 +48,8 @@ export default function Pharmacy_PrescriptionIntake(){
       const lines = items.map(it => ({ name: it.name, qty: Math.max(1, it.qty|0) }))
       localStorage.setItem('pharmacy.pos.pendingAddLines', JSON.stringify(lines))
       navigate('/pharmacy/pos')
-      // POS will read the storage and add lines automatically
     } catch (e) {
-      alert('Failed to forward to POS')
+      setToast({ type: 'error', message: 'Failed to forward to POS' })
     }
   }
 
@@ -104,6 +105,7 @@ export default function Pharmacy_PrescriptionIntake(){
           </div>
         </div>
       </div>
+      {toast && <Toast toast={toast} onClose={()=>setToast(null)} />}
     </div>
   )
 }

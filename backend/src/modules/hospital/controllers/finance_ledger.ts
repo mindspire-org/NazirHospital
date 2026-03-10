@@ -55,7 +55,7 @@ export async function manualDoctorEarning(data: { doctorId: string; departmentId
   return await FinanceJournal.create({ dateIso, refType: 'manual_doctor_earning', refId: data.doctorId, memo: data.memo, lines })
 }
 
-export async function postOpdTokenJournal(args: { tokenId: string; dateIso: string; fee: number; doctorId?: string; departmentId?: string; patientId?: string; patientName?: string; mrn?: string; tokenNo?: string; paidMethod?: 'Cash'|'Bank'|'AR'; sessionId?: string }){
+export async function postOpdTokenJournal(args: { tokenId: string; dateIso: string; fee: number; doctorId?: string; departmentId?: string; patientId?: string; patientName?: string; mrn?: string; tokenNo?: string; paidMethod?: 'Cash'|'Bank'|'AR'; sessionId?: string; createdByUsername?: string }){
   // Idempotency with reversals: if latest OPD exists after the latest reversal, reuse it; otherwise allow a fresh post
   const lastOpd: any = await FinanceJournal.findOne({ refType: 'opd_token', refId: args.tokenId }).sort({ createdAt: -1 }).lean()
   const lastRev: any = await FinanceJournal.findOne({ refType: 'opd_token_reversal', refId: args.tokenId }).sort({ createdAt: -1 }).lean()
@@ -72,6 +72,7 @@ export async function postOpdTokenJournal(args: { tokenId: string; dateIso: stri
   if (args.patientName) tagsBase.patientName = args.patientName
   if (args.mrn) tagsBase.mrn = args.mrn
   if (args.sessionId) tagsBase.sessionId = String(args.sessionId)
+  if (args.createdByUsername) tagsBase.createdByUsername = args.createdByUsername
 
   const lines: JournalLine[] = [
     { account: debitAccount, debit: args.fee, tags: { ...tagsBase } },

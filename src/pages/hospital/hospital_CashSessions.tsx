@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { financeApi } from '../../utils/api'
 import Hospital_CashCountSlipDialog, { type CashCountEntry } from '../../components/hospital/hospital_CashCountSlipDialog'
+import Toast, { type ToastState } from '../../components/ui/Toast'
 
 function iso(d: Date){ return d.toISOString().slice(0,10) }
 
@@ -24,6 +25,7 @@ export default function Hospital_CashSessions(){
   const [openSlip, setOpenSlip] = useState<boolean>(false)
   const [slipEntry, setSlipEntry] = useState<CashCountEntry | null>(null)
   const [ccSummary, setCcSummary] = useState<{ amount: number; count: number }>({ amount: 0, count: 0 })
+  const [toast, setToast] = useState<ToastState>(null)
 
   // No cash drawer session calls needed
 
@@ -58,7 +60,7 @@ export default function Hospital_CashSessions(){
 
   const addCount = async () => {
     const amt = parseFloat(String(ccAmount||'').trim())
-    if (!isFinite(amt) || amt <= 0) { alert('Enter a valid amount'); return }
+    if (!isFinite(amt) || amt <= 0) { setToast({ type: 'error', message: 'Enter a valid amount' }); return }
     let created: any
     try {
       created = await financeApi.createCashCount({
@@ -68,7 +70,7 @@ export default function Hospital_CashSessions(){
         receiver: ccReceiver.trim() || undefined,
         handoverBy: ccHandoverBy.trim() || undefined,
       })
-    } catch (e) { alert('Failed to save'); return }
+    } catch (e) { setToast({ type: 'error', message: 'Failed to save' }); return }
     const entry: CashCountEntry = {
       id: created?._id || crypto.randomUUID(),
       date: created?.date || ccDate || iso(new Date()),
@@ -198,6 +200,7 @@ export default function Hospital_CashSessions(){
 
 
       <Hospital_CashCountSlipDialog open={openSlip} onClose={()=>setOpenSlip(false)} entry={slipEntry} />
+      <Toast toast={toast} onClose={()=>setToast(null)} />
     </div>
   )
 }

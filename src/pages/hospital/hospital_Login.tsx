@@ -59,7 +59,7 @@ export default function Hospital_Login() {
 
       // Default: Hospital app users (Admin, Staff, and any other custom roles)
       localStorage.setItem('hospital.session', JSON.stringify({ username: u?.username, role: u?.role }))
-      navigate('/hospital')
+      navigate('/hospital/token-generator')
       return
     } catch (err) {
       setError('Invalid credentials')

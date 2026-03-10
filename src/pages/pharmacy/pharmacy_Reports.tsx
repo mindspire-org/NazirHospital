@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { pharmacyApi } from '../../utils/api'
+import { fmt12 } from '../../utils/timeFormat'
 import { Download, Printer } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -287,29 +288,6 @@ export default function Pharmacy_Reports() {
     const m = String(d.getMonth()+1).padStart(2,'0')
     const day = String(d.getDate()).padStart(2,'0')
     return `${y}-${m}-${day}`
-  }
-
-  function fmt12(hhmm: string): string {
-    try{
-      if (!hhmm) return ''
-      const s = String(hhmm).trim()
-      if (/[ap]m/i.test(s)){
-        const mm = s.match(/^(\d{1,2}):(\d{2})\s*([ap]m)$/i)
-        if (mm){
-          const h = Math.max(1, Math.min(12, parseInt(mm[1],10) || 12))
-          return `${String(h).padStart(2,'0')}:${mm[2]} ${mm[3].toUpperCase()}`
-        }
-        return s.replace(/(am|pm)/i, (m)=>m.toUpperCase())
-      }
-      const parts = s.split(':')
-      if (parts.length < 2) return s
-      const h = parseInt(parts[0],10)
-      const m = parts[1].slice(0,2)
-      if (isNaN(h)) return s
-      const am = h < 12
-      const h12 = (h % 12) || 12
-      return `${String(h12).padStart(2,'0')}:${m} ${am ? 'AM' : 'PM'}`
-    } catch { return hhmm }
   }
 
   function weekStart(date: Date){

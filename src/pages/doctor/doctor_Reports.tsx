@@ -7,6 +7,7 @@ import { printUltrasoundReport } from '../../components/diagnostic/diagnostic_Ul
 import { printCTScanReport } from '../../components/diagnostic/diagnostic_CTScan'
 import { printColonoscopyReport } from '../../components/diagnostic/diagnostic_Colonoscopy'
 import { printUpperGIEndoscopyReport } from '../../components/diagnostic/diagnostic_UpperGIEndoscopy'
+import Toast from '../../components/ui/Toast'
 
 function resolveDiagKey(name: string){
   const n = (name||'').toLowerCase()
@@ -45,6 +46,7 @@ export default function Doctor_Reports(){
   const [labPage, setLabPage] = useState(1)
   const [myOnly, setMyOnly] = useState(false)
   const [mrnFilter, setMrnFilter] = useState('')
+  const [toast, setToast] = useState<{type: 'success'|'error', message: string} | null>(null)
 
   // Load doctor session (and ensure id is the Mongo _id when possible)
   useEffect(()=>{
@@ -234,7 +236,7 @@ export default function Doctor_Reports(){
     if (key === 'CTScan'){ await printCTScanReport(payload as any); return }
     if (key === 'Colonoscopy'){ await printColonoscopyReport(payload as any); return }
     if (key === 'UpperGiEndoscopy'){ await printUpperGIEndoscopyReport(payload as any); return }
-    alert('Unknown diagnostic template for this test')
+    setToast({ type: 'error', message: 'Unknown diagnostic template for this test' })
   }
 
   async function onPrintLab(rec: LabResultRec){
@@ -456,6 +458,7 @@ export default function Doctor_Reports(){
           </div>
         </div>
       )}
+      {toast && <Toast toast={toast} onClose={()=>setToast(null)} />}
     </div>
   )
 }

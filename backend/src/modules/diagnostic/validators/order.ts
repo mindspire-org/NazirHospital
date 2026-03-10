@@ -40,6 +40,10 @@ export const diagnosticOrderCreateSchema = z.object({
 
   net: z.coerce.number().nonnegative().optional().default(0),
 
+  receivedAmount: z.coerce.number().nonnegative().optional().default(0),
+
+  paymentMethod: z.string().optional(),
+
   referringConsultant: z.string().optional(),
 
   tokenNo: z.string().optional(),

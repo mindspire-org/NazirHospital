@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import { hospitalApi } from '../../utils/api'
+import { fmt12 } from '../../utils/timeFormat'
 
-type User = { _id: string; username: string; role: string }
+type Shift = { _id: string; name: string; start: string; end: string }
+type User = { _id: string; username: string; role: string; shiftId?: string; shiftRestricted?: boolean }
 
 export default function Hospital_UserManagement() {
   const [users, setUsers] = useState<User[]>([])
+  const [shifts, setShifts] = useState<Shift[]>([])
   const [roles, setRoles] = useState<string[]>(['admin','staff'])
   const [newRoleName, setNewRoleName] = useState('')
   const [creatingRole, setCreatingRole] = useState(false)
@@ -12,7 +15,7 @@ export default function Hospital_UserManagement() {
   const [newRole, setNewRole] = useState<string>('staff')
   const [newPassword, setNewPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [editing, setEditing] = useState<{ _id: string; username: string; role: string } | null>(null)
+  const [editing, setEditing] = useState<{ _id: string; username: string; role: string; shiftId?: string; shiftRestricted?: boolean } | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
   const [notice, setNotice] = useState<{ text: string; kind: 'success'|'error' } | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -24,9 +27,10 @@ export default function Hospital_UserManagement() {
     ;(async () => {
       setLoading(true)
       try {
-        const [rolesRes, usersRes] = await Promise.allSettled([
+        const [rolesRes, usersRes, shiftsRes] = await Promise.allSettled([
           hospitalApi.listSidebarRoles() as any,
           hospitalApi.listHospitalUsers() as any,
+          hospitalApi.listShifts() as any,
         ])
         if (!mounted) return
         if (rolesRes.status === 'fulfilled'){
@@ -35,8 +39,18 @@ export default function Hospital_UserManagement() {
         }
         if (usersRes.status === 'fulfilled'){
           const arr = (usersRes.value?.users || usersRes.value?.items || usersRes.value || []) as any[]
-          const list: User[] = arr.map((u: any) => ({ _id: String(u._id || u.id), username: u.username, role: u.role }))
+          const list: User[] = arr.map((u: any) => ({ 
+            _id: String(u._id || u.id), 
+            username: u.username, 
+            role: u.role,
+            shiftId: u.shiftId,
+            shiftRestricted: u.shiftRestricted 
+          }))
           setUsers(list)
+        }
+        if (shiftsRes.status === 'fulfilled'){
+          const list = (shiftsRes.value?.items || []) as any[]
+          setShifts(list.map((s: any) => ({ _id: String(s._id || s.id), name: s.name, start: s.start, end: s.end })))
         }
       } catch (e) { console.error(e); if (mounted){ setUsers([]) } }
       finally { if (mounted) setLoading(false) }
@@ -80,12 +94,26 @@ export default function Hospital_UserManagement() {
     if (!editing) return
     setSavingEdit(true)
     try {
-      const updated = await hospitalApi.updateHospitalUser(editing._id, { username: editing.username, role: editing.role }) as any
+      const payload: any = { username: editing.username, role: editing.role }
+      if (editing.shiftId !== undefined) payload.shiftId = editing.shiftId || null
+      if (editing.shiftRestricted !== undefined) payload.shiftRestricted = editing.shiftRestricted
+      const updated = await hospitalApi.updateHospitalUser(editing._id, payload) as any
       const u = updated?.user || updated
-      setUsers(prev => prev.map(x => (x._id === editing._id ? ({ ...x, username: u?.username ?? editing.username, role: u?.role ?? editing.role }) : x)))
+      setUsers(prev => prev.map(x => (x._id === editing._id ? ({ 
+        ...x, 
+        username: u?.username ?? editing.username, 
+        role: u?.role ?? editing.role,
+        shiftId: u?.shiftId ?? editing.shiftId,
+        shiftRestricted: u?.shiftRestricted ?? editing.shiftRestricted
+      }) : x)))
       setEditing(null)
-    } catch (e) { console.error(e) }
-    finally { setSavingEdit(false) }
+      setNotice({ text: 'User updated', kind: 'success' })
+      setTimeout(() => setNotice(null), 2500)
+    } catch (e: any) {
+      console.error(e)
+      setNotice({ text: e?.message || 'Failed to update user', kind: 'error' })
+      setTimeout(() => setNotice(null), 3000)
+    } finally { setSavingEdit(false) }
   }
 
   const createRole = async () => {
@@ -133,34 +161,51 @@ export default function Hospital_UserManagement() {
                     <tr>
                       <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide">User</th>
                       <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide">Role</th>
+                      <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide">Shift</th>
                       <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 text-slate-800">
-                    {users.map(u => (
-                      <tr key={u._id} className="hover:bg-slate-50/70">
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 text-sm font-semibold text-slate-800 ring-1 ring-slate-200">
-                              {(u.username||'U').slice(0,1).toUpperCase()}
+                    {users.map(u => {
+                      const assignedShift = shifts.find(s => s._id === u.shiftId)
+                      return (
+                        <tr key={u._id} className="hover:bg-slate-50/70">
+                          <td className="px-5 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 text-sm font-semibold text-slate-800 ring-1 ring-slate-200">
+                                {(u.username||'U').slice(0,1).toUpperCase()}
+                              </div>
+                              <div>
+                                <div className="font-semibold text-slate-900">{u.username}</div>
+                                <div className="text-xs text-slate-500">ID: {String(u._id).slice(-6)}</div>
+                              </div>
                             </div>
-                            <div>
-                              <div className="font-semibold text-slate-900">{u.username}</div>
-                              <div className="text-xs text-slate-500">ID: {String(u._id).slice(-6)}</div>
+                          </td>
+                          <td className="px-5 py-3"><span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold capitalize text-slate-700">{u.role}</span></td>
+                          <td className="px-5 py-3">
+                            <div className="text-xs">
+                              {assignedShift ? (
+                                <div>
+                                  <div className="font-medium text-slate-700">{assignedShift.name}</div>
+                                  <div className="text-slate-500">{fmt12(assignedShift.start)}-{fmt12(assignedShift.end)}</div>
+                                  {u.shiftRestricted && <span className="mt-1 inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200">Restricted</span>}
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 italic">No shift</span>
+                              )}
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-5 py-3"><span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold capitalize text-slate-700">{u.role}</span></td>
-                        <td className="px-5 py-3">
-                          <div className="flex flex-wrap gap-2">
-                            <button onClick={()=>setEditing({ _id: u._id, username: u.username, role: u.role })} className="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-700">Edit</button>
-                            <button onClick={()=>{ setDeleteId(u._id); setDeleteOpen(true) }} className="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700">Delete</button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="px-5 py-3">
+                            <div className="flex flex-wrap gap-2">
+                              <button onClick={()=>setEditing({ _id: u._id, username: u.username, role: u.role, shiftId: u.shiftId, shiftRestricted: u.shiftRestricted })} className="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-700">Edit</button>
+                              <button onClick={()=>{ setDeleteId(u._id); setDeleteOpen(true) }} className="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700">Delete</button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
                     {users.length===0 && !loading && (
-                      <tr><td className="px-5 py-8 text-center text-slate-500" colSpan={3}>No users yet.</td></tr>
+                      <tr><td className="px-5 py-8 text-center text-slate-500" colSpan={4}>No users yet.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -208,6 +253,36 @@ export default function Hospital_UserManagement() {
                   {(roles||[]).map(r=> <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Assigned Shift</label>
+                <select 
+                  value={editing.shiftId || ''} 
+                  onChange={e=>setEditing(prev=> prev? { ...prev, shiftId: e.target.value || undefined } : prev)} 
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="">No shift (no restriction)</option>
+                  {shifts.map(s => (
+                    <option key={s._id} value={s._id}>{s.name} ({fmt12(s.start)}-{fmt12(s.end)})</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <input 
+                  type="checkbox" 
+                  id="shiftRestricted"
+                  checked={!!editing.shiftRestricted} 
+                  onChange={e=>setEditing(prev=> prev? { ...prev, shiftRestricted: e.target.checked } : prev)}
+                  className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                />
+                <label htmlFor="shiftRestricted" className="text-sm font-medium text-slate-700">
+                  Restrict login to shift timing only
+                </label>
+              </div>
+              {editing.shiftRestricted && !editing.shiftId && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Warning: Shift restriction is enabled but no shift is assigned. User will not be able to login.
+                </div>
+              )}
             </div>
             <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-3">
               <button type="button" onClick={()=>setEditing(null)} className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>

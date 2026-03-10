@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { receptionApi } from '../../utils/api'
 import { receptionSidebarNav } from '../../components/reception/reception_Sidebar'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 type Permission = {
   path: string
@@ -24,6 +25,7 @@ export default function Reception_SidebarPermissions() {
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const toastTimerRef = useRef<number | null>(null)
+  const [confirmResetRole, setConfirmResetRole] = useState<string | null>(null)
 
   const showToast = (type: 'success' | 'error', message: string) => {
     if (toastTimerRef.current) {
@@ -157,11 +159,15 @@ export default function Reception_SidebarPermissions() {
   }
 
   const resetToDefaults = async () => {
-    if (!confirm(`Are you sure you want to reset ${selectedRole} permissions to defaults?`)) return
-
+    setConfirmResetRole(selectedRole)
+  }
+  const doConfirmReset = async () => {
+    const role = confirmResetRole
+    setConfirmResetRole(null)
+    if (!role) return
     setSaving(true)
     try {
-      await (receptionApi as any).resetSidebarPermissions?.(selectedRole)
+      await (receptionApi as any).resetSidebarPermissions?.(role)
       await loadPermissions()
       showToast('success', 'Permissions reset to defaults')
     } catch (error) {
@@ -341,6 +347,15 @@ export default function Reception_SidebarPermissions() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!confirmResetRole}
+        title="Confirm Reset Permissions"
+        message={`Are you sure you want to reset ${confirmResetRole} permissions to defaults?`}
+        confirmText="Reset"
+        onCancel={()=>setConfirmResetRole(null)}
+        onConfirm={doConfirmReset}
+      />
     </div>
   )
 }

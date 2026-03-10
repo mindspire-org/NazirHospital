@@ -41,16 +41,29 @@ export async function getById(req: Request, res: Response){
 }
 
 export async function generate(req: Request, res: Response){
-  const { companyId, fromDate, toDate } = req.body as any
+  const { companyId, fromDate, toDate, transactionIds } = req.body as any
   if (!companyId) return res.status(400).json({ error: 'companyId is required' })
-  const txFilter: any = { companyId, status: 'accrued', netToCorporate: { $ne: 0 }, claimId: { $in: [null, '', undefined] } }
-  // Prefer createdAt range; if fromDate/toDate provided use those as day bounds
-  if (fromDate || toDate){
-    txFilter.createdAt = {}
-    if (fromDate) txFilter.createdAt.$gte = new Date(String(fromDate))
-    if (toDate) { const end = new Date(String(toDate)); end.setHours(23,59,59,999); txFilter.createdAt.$lte = end }
+  
+  // If specific transactionIds provided, use those; otherwise find all accrued
+  let tx: any[] = []
+  if (Array.isArray(transactionIds) && transactionIds.length > 0) {
+    tx = await CorporateTransaction.find({ 
+      _id: { $in: transactionIds }, 
+      companyId, 
+      status: 'accrued',
+      netToCorporate: { $ne: 0 },
+      claimId: { $in: [null, '', undefined] }
+    }).lean()
+  } else {
+    const txFilter: any = { companyId, status: 'accrued', netToCorporate: { $ne: 0 }, claimId: { $in: [null, '', undefined] } }
+    if (fromDate || toDate){
+      txFilter.createdAt = {}
+      if (fromDate) txFilter.createdAt.$gte = new Date(String(fromDate))
+      if (toDate) { const end = new Date(String(toDate)); end.setHours(23,59,59,999); txFilter.createdAt.$lte = end }
+    }
+    tx = await CorporateTransaction.find(txFilter).lean()
   }
-  const tx = await CorporateTransaction.find(txFilter).lean()
+  
   if (!tx.length) return res.status(400).json({ error: 'No transactions to claim' })
   const total = tx.reduce((s: number, t: any)=> s + Number(t?.netToCorporate||0), 0)
   const claim = await CorporateClaim.create({
@@ -112,6 +125,29 @@ export async function exportCsv(req: Request, res: Response){
   res.setHeader('Content-Type', 'text/csv')
   res.setHeader('Content-Disposition', `attachment; filename=claim_${String((cl as any)?.claimNo||id)}.csv`)
   res.send(rows.join('\n'))
+}
+
+// Update claim status and notes
+export async function update(req: Request, res: Response){
+  const { id } = req.params as any
+  const { status, notes } = req.body as any
+  const claim = await CorporateClaim.findById(id)
+  if (!claim) return res.status(404).json({ error: 'Claim not found' })
+  
+  // Update claim fields
+  if (status) claim.status = status
+  if (notes !== undefined) claim.notes = notes
+  await claim.save()
+  
+  // If status changed to rejected, revert transactions back to accrued
+  if (status === 'rejected') {
+    await CorporateTransaction.updateMany(
+      { claimId: String(id), status: 'claimed' },
+      { $set: { status: 'accrued', claimId: '' } }
+    )
+  }
+  
+  res.json({ claim })
 }
 
 // Remove a claim. Requires the claim to be unlocked/open.

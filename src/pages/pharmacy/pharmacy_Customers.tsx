@@ -6,6 +6,7 @@ import Pharmacy_CustomerCard from '../../components/pharmacy/pharmacy_CustomerCa
 import Pharmacy_PayBill from '../../components/pharmacy/pharmacy_PayBill'
 import Pharmacy_ConfirmDialog from '../../components/pharmacy/pharmacy_ConfirmDialog'
 import { pharmacyApi } from '../../utils/api'
+import Toast from '../../components/ui/Toast'
 
 export default function Pharmacy_Customers() {
   const [addOpen, setAddOpen] = useState(false)
@@ -22,6 +23,7 @@ export default function Pharmacy_Customers() {
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
   const [exporting, setExporting] = useState(false)
+  const [toast, setToast] = useState<{type: 'success'|'error', message: string} | null>(null)
 
   const exportCsv = async () => {
     try {
@@ -83,7 +85,7 @@ export default function Pharmacy_Customers() {
         document.body.removeChild(a)
         URL.revokeObjectURL(url)
       } catch {
-        alert('Failed to export customers')
+        setToast({ type: 'error', message: 'Failed to export customers' })
       }
     } finally {
       setExporting(false)
@@ -272,6 +274,7 @@ export default function Pharmacy_Customers() {
         }}
       />
       <Pharmacy_PayBill open={payBillOpen} onClose={() => { setPayBillOpen(false); setPaying(null) }} customer={paying} />
+      {toast && <Toast toast={toast} onClose={()=>setToast(null)} />}
     </div>
   )
 }

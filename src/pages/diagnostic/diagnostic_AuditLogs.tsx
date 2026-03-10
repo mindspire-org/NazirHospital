@@ -32,7 +32,7 @@ export default function Diagnostic_AuditLogs(){
   const end = Math.min((curPage - 1) * rows + logs.length, total)
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="space-y-4">
       <h2 className="text-xl font-semibold text-slate-800">Audit Logs</h2>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4">

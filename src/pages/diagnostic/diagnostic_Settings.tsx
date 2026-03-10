@@ -10,7 +10,6 @@ export default function Diagnostic_Settings(){
   const [address, setAddress] = useState('')
   const [email, setEmail] = useState('')
   const [reportFooter, setReportFooter] = useState('')
-  const [slipFooter, setSlipFooter] = useState('')
   const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null)
   const [department, setDepartment] = useState('')
   const [consultantName, setConsultantName] = useState('')
@@ -32,7 +31,6 @@ export default function Diagnostic_Settings(){
         setAddress(s.address || '')
         setEmail(s.email || '')
         setReportFooter(s.reportFooter || '')
-        setSlipFooter(s.slipFooter || '')
         setLogoDataUrl(s.logoDataUrl || null)
         setDepartment(s.department || '')
         setConsultantName(s.consultantName || '')
@@ -65,7 +63,6 @@ export default function Diagnostic_Settings(){
         address,
         email,
         reportFooter,
-        slipFooter,
         logoDataUrl: logoDataUrl || undefined,
         department,
         consultantName,
@@ -87,7 +84,6 @@ export default function Diagnostic_Settings(){
       await diagnosticApi.updateSettings(payload)
       setNotice('Diagnostic settings saved')
       try { setTimeout(()=> setNotice(''), 2500) } catch {}
-      try { window.dispatchEvent(new Event('diagnostic:settings-updated')) } catch {}
     } catch {}
     finally { setSaving(false) }
   }
@@ -95,7 +91,7 @@ export default function Diagnostic_Settings(){
   // No system settings
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="space-y-4">
       <div className="flex items-center gap-2 text-slate-800">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path fillRule="evenodd" d="M8.841 2.718a2.25 2.25 0 0 1 2.318-.495 2.25 2.25 0 0 0 2.682 1.212 2.25 2.25 0 0 1 2.941 1.424 2.25 2.25 0  0 0 1.765 1.765 2.25 2.25 0  0 1 1.424 2.941 2.25 2.25 0  0 0 1.212 2.682 2.25 2.25 0  0 1-.495 2.318 2.25 2.25 0  0 0-1.212 2.682 2.25 2.25 0  0 1-1.424 2.941 2.25 2.25 0  0 0-1.765 1.765 2.25 2.25 0  0 1-2.941 1.424 2.25 2.25 0  0 0-2.682 1.212 2.25 2.25 0  0 1-2.318-.495 2.25 2.25 0  0 0-3.294 0 2.25 2.25 0  0 1-2.318.495 2.25 2.25 0  0 0-1.212-2.682 2.25 2.25 0  0 1-1.424-2.941 2.25 2.25 0  0 0-1.212-2.682 2.25 2.25 0  0 1 .495-2.318 2.25 2.25 0  0 0 1.212-2.682 2.25 2.25 0  0 1 1.424-2.941 2.25 2.25 0  0 0 1.765-1.765 2.25 2.25 0  0 1 2.941-1.424 2.25 2.25 0  0 0 2.682-1.212 2.25 2.25 0  0 1 2.318.495 2.25 2.25 0  0 0 3.294 0Z" clipRule="evenodd"/></svg>
         <h2 className="text-xl font-bold">Settings</h2>
@@ -105,17 +101,18 @@ export default function Diagnostic_Settings(){
       )}
 
       {/* Single card (no tabs) */}
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <div className="text-base font-semibold text-slate-800">Diagnostic Profile</div>
-        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm text-slate-700">Diagnostic Name</label>
-              <input value={diagnosticName} onChange={e=>setDiagnosticName(e.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm text-slate-700">Phone Number</label>
-              <input value={phone} onChange={e=>setPhone(e.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="+92-21-1234567" />
+        <div className="rounded-xl border border-slate-200 bg-white">
+          <div className="border-b border-slate-200 px-4 py-3 font-medium text-slate-800">Diagnostic Settings</div>
+          <div className="space-y-4 p-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm text-slate-700">Diagnostic Name</label>
+                <input value={diagnosticName} onChange={e=>setDiagnosticName(e.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm text-slate-700">Phone Number</label>
+                <input value={phone} onChange={e=>setPhone(e.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="+92-21-1234567" />
+              </div>
             </div>
 
             <div>
@@ -171,14 +168,9 @@ export default function Diagnostic_Settings(){
               })}
             </div>
 
-            <div className="md:col-span-2">
+            <div>
               <label className="mb-1 block text-sm text-slate-700">Report Footer</label>
               <textarea value={reportFooter} onChange={e=>setReportFooter(e.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" rows={3} />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-sm text-slate-700">Slip Footer</label>
-              <input value={slipFooter} onChange={e=>setSlipFooter(e.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" />
             </div>
 
             <div>

@@ -25,8 +25,20 @@ import * as BBInventory from '../controllers/bb_inventory.controller'
 import * as CashMovements from '../controllers/cash_movement.controller'
 import * as CashCounts from '../controllers/cash_count.controller'
 import * as SidebarPerms from '../controllers/sidebarPermission.controller'
+import * as IncomeLedger from '../controllers/income_ledger.controller'
+import { auth } from '../../../common/middleware/auth'
 
 const r = Router()
+
+// Public auth endpoints
+r.post('/users/login', Users.login)
+r.post('/users/logout', Users.logout)
+// Legacy compatibility
+r.post('/login', Users.login)
+r.post('/logout', Users.logout)
+
+// All other Lab endpoints require auth
+r.use(auth)
 
 // Purchase Drafts (Pending Review)
 r.get('/purchase-drafts', Drafts.list)
@@ -104,12 +116,6 @@ r.get('/users', Users.list)
 r.post('/users', Users.create)
 r.put('/users/:id', Users.update)
 r.delete('/users/:id', Users.remove)
-// Auth (Lab Users)
-r.post('/users/login', Users.login)
-r.post('/users/logout', Users.logout)
-// Legacy compatibility
-r.post('/login', Users.login)
-r.post('/logout', Users.logout)
 
 // Sidebar Roles & Permissions
 r.get('/sidebar-roles', SidebarPerms.listRoles)
@@ -143,8 +149,13 @@ r.delete('/tests/:id', Tests.remove)
 // Orders (Sample Intake)
 r.get('/orders', Orders.list)
 r.post('/orders', Orders.create)
+r.post('/orders/token/:tokenNo/receive-payment', Orders.receivePayment)
+r.put('/orders/token/:tokenNo', Orders.updateToken)
 r.put('/orders/:id/track', Orders.updateTrack)
 r.delete('/orders/:id', Orders.remove)
+
+// Income Ledger
+r.get('/income-ledger', IncomeLedger.list)
 
 // Appointments (Lab)
 r.get('/appointments', Appointments.list)

@@ -2,8 +2,29 @@ import { labApi } from '../../api'
 
 export type LabReportRow = { test: string; normal?: string; unit?: string; value?: string; prevValue?: string; flag?: 'normal'|'abnormal'|'critical'; comment?: string }
 
+async function makeBarcodeDataUrl(text: string): Promise<string> {
+  const value = String(text || '').trim()
+  if (!value) return ''
+  try {
+    const canvas = document.createElement('canvas')
+    const mod: any = await import('jsbarcode')
+    const JsBarcode: any = (mod && typeof mod === 'function') ? mod : mod?.default
+    if (typeof JsBarcode !== 'function') return ''
+    JsBarcode(canvas, value, {
+      format: 'CODE128',
+      displayValue: false,
+      height: 44,
+      margin: 0,
+    })
+    return canvas.toDataURL('image/png')
+  } catch {
+    return ''
+  }
+}
+
 export type LabReportInput = {
   tokenNo: string
+  barcode?: string
   createdAt: string
   sampleTime?: string
   reportingTime?: string
@@ -128,18 +149,32 @@ async function make3DIllustrationPng(w = 520, h = 180): Promise<string> {
 }
 
 function pickColumns(rows: LabReportRow[]) {
-  const hasPrev = (rows||[]).some(r => (r.prevValue || '').trim().length > 0)
-  const hasFlag = (rows||[]).some(r => (r.flag || '').length > 0)
-  const hasComment = (rows||[]).some(r => (r.comment || '').trim().length > 0)
+  // Filter out completely empty rows so they don't force columns to render
+  const nonEmptyRows = (rows||[]).filter(r =>
+    (r.value || '').trim().length > 0 ||
+    (r.normal || '').trim().length > 0 ||
+    (r.unit || '').trim().length > 0 ||
+    (r.prevValue || '').trim().length > 0 ||
+    (r.flag || '').trim().length > 0 ||
+    (r.comment || '').trim().length > 0
+  )
+  const hasPrev = nonEmptyRows.some(r => (r.prevValue || '').trim().length > 0)
+  const hasFlag = nonEmptyRows.some(r => (r.flag || '').length > 0)
+  const hasComment = nonEmptyRows.some(r => (r.comment || '').trim().length > 0)
+  const hasNormal = nonEmptyRows.some(r => (r.normal || '').trim().length > 0)
+  const hasUnit = nonEmptyRows.some(r => (r.unit || '').trim().length > 0)
   const head = [
-    ['Test','Reference Range','Unit', ...(hasPrev? ['Previous'] : []), 'Result', ...(hasFlag? ['Flag'] : []), ...(hasComment? ['Comment'] : [])]
+    ['Test', ...(hasNormal? ['Reference Range'] : []), ...(hasUnit? ['Unit'] : []), ...(hasPrev? ['Previous'] : []), 'Result', ...(hasFlag? ['Flag'] : []), ...(hasComment? ['Comment'] : [])]
   ]
-  const body = (rows||[]).map(r => [
-    r.test||'', r.normal||'', r.unit||'', ...(hasPrev? [r.prevValue||''] : []), r.value||'', ...(hasFlag? [r.flag||''] : []), ...(hasComment? [r.comment||''] : [])
+  const body = nonEmptyRows.map(r => [
+    r.test||'', ...(hasNormal? [r.normal||''] : []), ...(hasUnit? [r.unit||''] : []), ...(hasPrev? [r.prevValue||''] : []), r.value||'', ...(hasFlag? [r.flag||''] : []), ...(hasComment? [r.comment||''] : [])
   ])
-  const idxPrev = hasPrev ? 3 : -1
-  const idxFlag = hasFlag ? (hasPrev ? 5 : 4) : -1
-  const idxResult = hasPrev ? 4 : 3
+  let idx = 1
+  if (hasNormal) idx++
+  if (hasUnit) idx++
+  const idxPrev = hasPrev ? idx++ : -1
+  const idxResult = idx
+  const idxFlag = hasFlag ? idx + 1 : -1
   return { head, body, idxPrev, idxFlag, idxResult }
 }
 
@@ -149,7 +184,6 @@ async function buildModernDoc(input: LabReportInput){
   const address = s?.address || '-'
   const phone = s?.phone || ''
   const email = s?.email || ''
-  const department = s?.department || 'Department of Pathology'
   const logo = s?.logoDataUrl || ''
   const reportFooter = s?.reportFooter || ''
   const primaryConsultant = { name: s?.consultantName || '', degrees: s?.consultantDegrees || '', title: s?.consultantTitle || '' }
@@ -197,70 +231,79 @@ async function buildModernDoc(input: LabReportInput){
 
   doc.setTextColor(255,255,255)
   doc.setFont(fontName, 'bold')
-  doc.setFontSize(18)
-  doc.text(String(labName).toUpperCase(), marginX + 98, 58)
+  doc.setFontSize(16)
+  doc.text(String(labName).toUpperCase(), marginX + 98, 58, { maxWidth: 300 })
   doc.setFont(fontName, 'normal')
   doc.setFontSize(10)
-  doc.setTextColor(226,232,240)
-  doc.text(String(department), marginX + 98, 74)
   doc.setTextColor(241,245,249)
   doc.setFontSize(9)
-  const contact = [address, phone?`Ph: ${phone}`:'', email?`Email: ${email}`:''].filter(Boolean).join('  •  ')
-  doc.text(contact, marginX + 98, 90)
+  const contact1 = [address, phone?`Ph: ${phone}`:''].filter(Boolean).join('  •  ')
+  doc.text(contact1, marginX + 98, 90)
+  if ((email || '').trim()) {
+    doc.setFontSize(9)
+    doc.text(`Email: ${String(email)}`, marginX + 98, 102)
+  }
 
-  doc.setTextColor(255,255,255)
-  doc.setFont(fontName, 'bold')
-  doc.setFontSize(12)
-  doc.text('LABORATORY REPORT', pageW - marginX - 14, 56, { align: 'right' })
-  doc.setFont(fontName, 'normal')
-  doc.setFontSize(9)
-  doc.setTextColor(226,232,240)
-  doc.text(`Sample No: ${String(input.tokenNo || '-')}`, pageW - marginX - 14, 74, { align: 'right' })
-  if ((input.profileLabel||'').trim()) {
-    doc.text(String(input.profileLabel).trim(), pageW - marginX - 14, 90, { align: 'right' })
+  if ((input.barcode || '').trim()) {
+    try {
+      const b = String(input.barcode || '').trim()
+      const png = await makeBarcodeDataUrl(b)
+      if (png) {
+        const bw = 150
+        const bh = 24
+        const bx = pageW - marginX - bw - 18
+        const by = 54
+        doc.setFillColor(255,255,255)
+        doc.setDrawColor(203,213,225)
+        doc.setLineWidth(0.8)
+        doc.roundedRect(bx - 10, by - 10, bw + 20, bh + 30, 12, 12, 'FD')
+        doc.addImage(png, 'PNG' as any, bx, by, bw, bh, undefined, 'FAST')
+        doc.setFont(fontName, 'bold')
+        doc.setFontSize(8)
+        doc.setTextColor(15,23,42)
+        doc.text(b, bx + bw / 2, by + bh + 16, { align: 'center' })
+      }
+    } catch {}
   }
 
   const cardY = 18 + bandH + 14
   doc.setDrawColor(226,232,240)
   doc.setFillColor(255,255,255)
-  doc.roundedRect(marginX, cardY, pageW - marginX*2, 108, 12, 12, 'FD')
+  doc.roundedRect(marginX, cardY, pageW - marginX*2, 92, 12, 12, 'FD')
 
   const labelColor = [71,85,105]
   const valueColor = [15,23,42]
 
-  const drawKV = (label: string, value: string, x: number, y: number) => {
+  const drawKVInline = (label: string, value: string, x: number, yy: number) => {
+    const lbl = `${label}: `
     doc.setFont(fontName, 'bold')
     doc.setTextColor(labelColor[0], labelColor[1], labelColor[2])
     doc.setFontSize(9)
-    doc.text(label, x, y)
+    doc.text(lbl, x, yy)
+    const w = doc.getTextWidth(lbl)
     doc.setFont(fontName, 'normal')
     doc.setTextColor(valueColor[0], valueColor[1], valueColor[2])
-    doc.setFontSize(10)
-    doc.text(value, x, y + 14)
+    doc.text(String(value || '-'), x + w, yy)
   }
 
-  const col1 = marginX + 14
-  const col2 = marginX + (pageW - marginX*2) / 3 + 6
-  const col3 = marginX + (pageW - marginX*2) * 2 / 3 + 0
+  const col1 = marginX + 24
+  const col2 = marginX + (pageW - marginX*2) / 2 + 0
 
-  drawKV('Patient Name', String(input.patient.fullName || '-'), col1, cardY + 22)
-  drawKV('MR No', String(input.patient.mrn || '-'), col2, cardY + 22)
-  drawKV('Age / Gender', `${String(input.patient.age || '-')} / ${String(input.patient.gender || '-')}`, col3, cardY + 22)
+  drawKVInline('Patient Name', String(input.patient.fullName || '-'), col1, cardY + 22)
+  drawKVInline('MR No', String(input.patient.mrn || '-'), col2, cardY + 22)
 
-  drawKV('Reg. & Sample Time', String(fmtDateTime(input.createdAt)), col1, cardY + 64)
-  drawKV('Reporting Time', String(fmtDateTime(input.reportingTime || '-')), col2, cardY + 64)
-  drawKV('Referring Consultant', String(input.referringConsultant || '-'), col3, cardY + 64)
+  drawKVInline('Age', String(input.patient.age || '-'), col1, cardY + 38)
+  drawKVInline('Gender', String(input.patient.gender || '-'), col2, cardY + 38)
 
-  doc.setFont(fontName, 'bold')
-  doc.setTextColor(labelColor[0], labelColor[1], labelColor[2])
-  doc.setFontSize(9)
-  doc.text('Address / Contact', col1, cardY + 104)
-  doc.setFont(fontName, 'normal')
-  doc.setTextColor(valueColor[0], valueColor[1], valueColor[2])
-  doc.setFontSize(10)
-  doc.text(`${String(input.patient.address || '-')}${input.patient.phone ? `  •  ${String(input.patient.phone)}` : ''}`, col1, cardY + 118)
+  drawKVInline('Lab No', String(input.tokenNo || '-'), col1, cardY + 54)
+  drawKVInline('Reporting Time', String(fmtDateTime(input.reportingTime || '-')), col2, cardY + 54)
 
-  const yStart = cardY + 128
+  drawKVInline('Reg. & Sample Time', String(fmtDateTime(input.createdAt)), col1, cardY + 70)
+  drawKVInline('Referring Consultant', String(input.referringConsultant || '-'), col2, cardY + 70)
+
+  drawKVInline('Address / Contact', `${String(input.patient.address || '-')}${input.patient.phone ? `  •  ${String(input.patient.phone)}` : ''}`, col1, cardY + 86)
+
+  const yStart = cardY + 118
 
   const { head, body, idxPrev, idxFlag, idxResult } = pickColumns(input.rows)
   autoTable(doc, {
@@ -295,11 +338,17 @@ async function buildModernDoc(input: LabReportInput){
 
   const lastY = (((doc as any).lastAutoTable?.finalY) || yStart) + 14
   if ((input.interpretation || '').trim()) {
+    const bullets = String(input.interpretation || '')
+      .split(/\r?\n/)
+      .map(s => s.trim())
+      .filter(Boolean)
+      .map(s => `• ${s}`)
+      .join('\n')
     autoTable(doc, {
       startY: lastY,
       body: [
         [{ content: 'Clinical Interpretation', styles: { fontStyle: 'bold', textColor: [15,23,42] } }],
-        [{ content: String(input.interpretation || '') }],
+        [{ content: bullets || String(input.interpretation || '') }],
       ],
       theme: 'plain',
       styles: { font: fontName, fontSize: 10, cellPadding: 0, textColor: [15,23,42] },

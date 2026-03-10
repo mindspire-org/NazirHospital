@@ -8,7 +8,7 @@ export const settingsUpdateSchema = z.object({
   reportFooter: z.string().optional(),
   logoDataUrl: z.string().optional(),
   department: z.string().optional(),
-  reportTemplate: z.enum(['classic','tealGradient','modern']).optional(),
+  reportTemplate: z.enum(['classic','tealGradient','modern','adl','skmch']).optional(),
   slipTemplate: z.enum(['thermal','a4Bill']).optional(),
   consultantName: z.string().optional(),
   consultantDegrees: z.string().optional(),

@@ -46,6 +46,7 @@ export default function Lab_Appointments() {
     age: '',
     notes: '',
     testIds: [] as string[],
+    testSearch: '',
   })
   const editUpdate = (k: keyof typeof editForm, v: any) => setEditForm(prev => ({ ...prev, [k]: v }))
 
@@ -58,6 +59,7 @@ export default function Lab_Appointments() {
     time: '',
     notes: '',
     testIds: [] as string[],
+    testSearch: '',
   })
   const update = (k: keyof typeof form, v: any) => setForm(prev => ({ ...prev, [k]: v }))
 
@@ -68,6 +70,10 @@ export default function Lab_Appointments() {
   const phoneSuggestQueryRef = useRef<string>('')
 
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null)
+
+  // test suggestions
+  const [testSuggestOpen, setTestSuggestOpen] = useState(false)
+  const testSuggestWrapRef = useRef<HTMLDivElement>(null)
 
   const [notice, setNotice] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
   const showNotice = (kind: 'success' | 'error', text: string) => {
@@ -86,6 +92,7 @@ export default function Lab_Appointments() {
       age: r.age || '',
       notes: r.notes || '',
       testIds: Array.isArray(r.tests) ? r.tests.slice() : [],
+      testSearch: '',
     })
     setEditOpen(true)
   }
@@ -124,8 +131,8 @@ export default function Lab_Appointments() {
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
-      if (!phoneSuggestWrapRef.current) return
-      if (!phoneSuggestWrapRef.current.contains(e.target as any)) setPhoneSuggestOpen(false)
+      if (phoneSuggestWrapRef.current && !phoneSuggestWrapRef.current.contains(e.target as any)) setPhoneSuggestOpen(false)
+      if (testSuggestWrapRef.current && !testSuggestWrapRef.current.contains(e.target as any)) setTestSuggestOpen(false)
     }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
@@ -233,7 +240,7 @@ export default function Lab_Appointments() {
 
       await labApi.createAppointment(payload)
       showNotice('success', 'Appointment created')
-      setForm({ phone: '', patientName: '', gender: '', age: '', time: '', notes: '', testIds: [] })
+      setForm({ phone: '', patientName: '', gender: '', age: '', time: '', notes: '', testIds: [], testSearch: '' })
       setSelectedPatient(null)
       setPhoneSuggestItems([])
       setPhoneSuggestOpen(false)
@@ -364,36 +371,63 @@ export default function Lab_Appointments() {
           </div>
           <div className="md:col-span-3">
             <label className="mb-1 block text-xs font-medium text-slate-600">Tests *</label>
-            <div className="rounded-md border border-slate-200 p-2">
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                {tests.slice(0, 120).map(t => {
-                  const checked = form.testIds.includes(t.id)
+            <div ref={testSuggestWrapRef} className="relative">
+              <input 
+                value={form.testSearch} 
+                onChange={e => {
+                  update('testSearch', e.target.value)
+                  setTestSuggestOpen(e.target.value.trim().length > 0)
+                }} 
+                onFocus={() => { if (form.testSearch.trim().length > 0) setTestSuggestOpen(true) }}
+                className="w-full rounded-md border border-slate-300 px-3 py-2" 
+                placeholder="Type to search tests..." 
+              />
+              {testSuggestOpen && (
+                <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg">
+                  {tests.filter(t => !form.testIds.includes(t.id) && t.name.toLowerCase().includes(form.testSearch.toLowerCase())).length === 0 ? (
+                    <div className="px-3 py-2 text-sm text-slate-500">No matching tests</div>
+                  ) : (
+                    tests.filter(t => !form.testIds.includes(t.id) && t.name.toLowerCase().includes(form.testSearch.toLowerCase())).slice(0, 20).map((t: any) => (
+                      <button 
+                        key={t.id} 
+                        type="button" 
+                        onClick={() => {
+                          update('testIds', [...form.testIds, t.id])
+                          update('testSearch', '')
+                          setTestSuggestOpen(false)
+                        }} 
+                        className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-slate-50"
+                      >
+                        <span className="text-sm text-slate-800">{t.name}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+            {form.testIds.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {form.testIds.map(id => {
+                  const t = tests.find(x => x.id === id)
                   return (
-                    <label key={t.id} className="flex items-center gap-2 text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={e => {
-                          const on = e.target.checked
-                          update('testIds', on ? Array.from(new Set([...form.testIds, t.id])) : form.testIds.filter(x => x !== t.id))
-                        }}
-                      />
-                      <span className="truncate">{t.name}</span>
-                    </label>
+                    <span key={id} className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-2 py-1 text-sm text-sky-700">
+                      {t?.name || id}
+                      <button 
+                        onClick={() => update('testIds', form.testIds.filter(x => x !== id))}
+                        className="ml-1 text-sky-600 hover:text-sky-800"
+                      >×</button>
+                    </span>
                   )
                 })}
               </div>
-              {tests.length > 120 && (
-                <div className="mt-2 text-xs text-slate-500">Showing first 120 tests (can be extended if needed).</div>
-              )}
-            </div>
+            )}
           </div>
           <div className="md:col-span-3">
             <label className="mb-1 block text-xs font-medium text-slate-600">Notes</label>
             <input value={form.notes} onChange={e => update('notes', e.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2" placeholder="Optional notes" />
           </div>
           <div className="md:col-span-3 flex items-center justify-end gap-2">
-            <button type="button" onClick={() => { setForm({ phone: '', patientName: '', gender: '', age: '', time: '', notes: '', testIds: [] }); setSelectedPatient(null) }} className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700">Clear</button>
+            <button type="button" onClick={() => { setForm({ phone: '', patientName: '', gender: '', age: '', time: '', notes: '', testIds: [], testSearch: '' }); setSelectedPatient(null) }} className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700">Clear</button>
             <button type="button" onClick={createAppointment} className="rounded-md bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-700">Save Appointment</button>
           </div>
         </div>
@@ -507,26 +541,56 @@ export default function Lab_Appointments() {
 
                 <div className="md:col-span-3">
                   <label className="mb-1 block text-xs font-medium text-slate-600">Tests *</label>
-                  <div className="rounded-md border border-slate-200 p-2">
-                    <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                      {tests.slice(0, 120).map(t => {
-                        const checked = editForm.testIds.includes(t.id)
+                  <div className="relative">
+                    <input 
+                      value={editForm.testSearch} 
+                      onChange={e => {
+                        editUpdate('testSearch', e.target.value)
+                        setTestSuggestOpen(e.target.value.trim().length > 0)
+                      }} 
+                      onFocus={() => { if (editForm.testSearch.trim().length > 0) setTestSuggestOpen(true) }}
+                      className="w-full rounded-md border border-slate-300 px-3 py-2" 
+                      placeholder="Type to search tests..." 
+                    />
+                    {testSuggestOpen && (
+                      <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg">
+                        {tests.filter(t => !editForm.testIds.includes(t.id) && t.name.toLowerCase().includes(editForm.testSearch.toLowerCase())).length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-slate-500">No matching tests</div>
+                        ) : (
+                          tests.filter(t => !editForm.testIds.includes(t.id) && t.name.toLowerCase().includes(editForm.testSearch.toLowerCase())).slice(0, 20).map((t: any) => (
+                            <button 
+                              key={t.id} 
+                              type="button" 
+                              onClick={() => {
+                                editUpdate('testIds', [...editForm.testIds, t.id])
+                                editUpdate('testSearch', '')
+                                setTestSuggestOpen(false)
+                              }} 
+                              className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-slate-50"
+                            >
+                              <span className="text-sm text-slate-800">{t.name}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {editForm.testIds.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {editForm.testIds.map(id => {
+                        const t = tests.find(x => x.id === id)
                         return (
-                          <label key={t.id} className="flex items-center gap-2 text-sm text-slate-700">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={e => {
-                                const on = e.target.checked
-                                editUpdate('testIds', on ? Array.from(new Set([...editForm.testIds, t.id])) : editForm.testIds.filter(x => x !== t.id))
-                              }}
-                            />
-                            <span className="truncate">{t.name}</span>
-                          </label>
+                          <span key={id} className="inline-flex items-center gap-1 rounded-md bg-sky-50 px-2 py-1 text-sm text-sky-700">
+                            {t?.name || id}
+                            <button 
+                              onClick={() => editUpdate('testIds', editForm.testIds.filter(x => x !== id))}
+                              className="ml-1 text-sky-600 hover:text-sky-800"
+                            >×</button>
+                          </span>
                         )
                       })}
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 <div className="md:col-span-3">

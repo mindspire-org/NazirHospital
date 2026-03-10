@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { aestheticApi } from '../../utils/api'
 import { aestheticSidebarNav } from '../../components/aesthetic/aesthetic_Sidebar'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 type Permission = {
   path: string
@@ -24,6 +25,7 @@ export default function Aesthetic_SidebarPermissions() {
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const toastTimerRef = useRef<number | null>(null)
+  const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; type?: 'deleteRole'|'resetDefaults'; role?: string }>({ open: false })
 
   const showToast = (type: 'success' | 'error', message: string) => {
     if (toastTimerRef.current) {
@@ -108,7 +110,13 @@ export default function Aesthetic_SidebarPermissions() {
   const currentPermissions = permissions.find(p => p.role === selectedRole)
 
   const deleteRole = async (role: string) => {
-    if (!confirm(`Delete role "${role}"? Users assigned to this role should be updated first.`)) return
+    setConfirmDlg({ open: true, type: 'deleteRole', role })
+  }
+
+  const confirmDeleteRole = async () => {
+    const role = String(confirmDlg.role || '')
+    setConfirmDlg({ open: false })
+    if (!role) return
     try {
       await (aestheticApi as any).deleteSidebarRole(role)
       showToast('success', `Role deleted: ${role}`)
@@ -170,11 +178,17 @@ export default function Aesthetic_SidebarPermissions() {
   }
 
   const resetToDefaults = async () => {
-    if (!confirm(`Are you sure you want to reset ${selectedRole} permissions to defaults?`)) return
+    setConfirmDlg({ open: true, type: 'resetDefaults', role: selectedRole })
+  }
+
+  const confirmResetDefaults = async () => {
+    const role = String(confirmDlg.role || selectedRole || '')
+    setConfirmDlg({ open: false })
+    if (!role) return
 
     setSaving(true)
     try {
-      await (aestheticApi as any).resetSidebarPermissions(selectedRole)
+      await (aestheticApi as any).resetSidebarPermissions(role)
       await loadPermissions()
       showToast('success', 'Permissions reset to defaults')
     } catch (error) {
@@ -193,6 +207,7 @@ export default function Aesthetic_SidebarPermissions() {
   }
 
   return (
+    <>
     <div className="space-y-6">
       {toast && (
         <div className="fixed right-4 top-4 z-60 w-[min(92vw,420px)]">
@@ -359,5 +374,14 @@ export default function Aesthetic_SidebarPermissions() {
         )}
       </div>
     </div>
+    <ConfirmDialog
+      open={!!confirmDlg.open}
+      title="Confirm"
+      message={confirmDlg.type==='deleteRole' ? `Delete role "${confirmDlg.role}"? Users assigned to this role should be updated first.` : `Are you sure you want to reset ${confirmDlg.role || selectedRole} permissions to defaults?`}
+      confirmText={confirmDlg.type==='deleteRole' ? 'Delete' : 'Reset'}
+      onCancel={()=>setConfirmDlg({ open: false })}
+      onConfirm={confirmDlg.type==='deleteRole' ? confirmDeleteRole : confirmResetDefaults}
+    />
+    </>
   )
 }

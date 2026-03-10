@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Search, ChevronLeft, Plus } from 'lucide-react'
-import { labApi } from '../../utils/api'
+import { Search, ChevronLeft, Plus, Barcode, Building2 } from 'lucide-react'
+import { labApi, corporateApi } from '../../utils/api'
 import { useSearchParams } from 'react-router-dom'
 import { previewLabReportPdf } from '../../utils/printLabReport'
 
@@ -27,6 +27,11 @@ type Order = {
   reportingTime?: string
   returnedTests?: string[]
   referringConsultant?: string
+  barcode?: string
+  corporateId?: string
+  corporateName?: string
+  corporatePreAuthNo?: string
+  billingType?: 'cash' | 'corporate'
 }
 
 type Track = { status: 'received' | 'completed'; sampleTime?: string; reportingTime?: string; tokenNo: string }
@@ -34,6 +39,13 @@ type Track = { status: 'received' | 'completed'; sampleTime?: string; reportingT
 type ResultRow = { id: string; test: string; normal?: string; unit?: string; prevValue?: string; value?: string; flag?: 'normal'|'abnormal'|'critical'; comment?: string }
 
 function formatDateTime(iso: string) { const d = new Date(iso); return d.toLocaleDateString() + ', ' + d.toLocaleTimeString() }
+
+function genBarcode(order: Order) {
+  const d = new Date(order.createdAt)
+  const y = d.getFullYear()
+  const part = String(order.tokenNo || order.id || '').replace(/\s+/g, '').replace(/[^a-z0-9_-]/gi, '')
+  return `BC-${y}-${part}`
+}
 
 function genToken(dateIso: string, id: string) {
   const d = new Date(dateIso)
@@ -47,10 +59,12 @@ export default function Lab_Results() {
   const [searchParams] = useSearchParams()
   const [orders, setOrders] = useState<Order[]>([])
   const [tests, setTests] = useState<LabTest[]>([])
-  const [track, setTrack] = useState<Record<string, Track>>({})
+  const [track, setTrack] = useState<Record<string, Track>>(({}))
   const [tick, setTick] = useState(0)
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
+  const [companies, setCompanies] = useState<Array<{ id: string; name: string }>>([])
+  const [selectedCompany, setSelectedCompany] = useState('')
   // Pagination and search for sample selection (must be declared before effects that use them)
   const [q, setQ] = useState('')
   const [rowsPer, setRowsPer] = useState(10)
@@ -64,12 +78,42 @@ export default function Lab_Results() {
     let mounted = true
     ;(async()=>{
       try {
+        const res: any = await corporateApi.listCompanies()
+        if (!mounted) return
+        setCompanies((res?.companies||[]).map((c:any)=>({ id: String(c._id||c.id), name: c.name })))
+      } catch { setCompanies([]) }
+    })()
+    return ()=>{ mounted = false }
+  }, [])
+
+  useEffect(()=>{
+    let mounted = true
+    ;(async()=>{
+      try {
         const [ordersRes, testsRes] = await Promise.all([
           labApi.listOrders({ q: q || undefined, limit: rowsPer, page, status: 'received' }),
           labApi.listTests({ limit: 1000 }),
         ])
         if (!mounted) return
-        const o: Order[] = (ordersRes.items||[]).map((x:any)=>({ id: x._id, createdAt: x.createdAt || new Date().toISOString(), patient: x.patient || { fullName: '-', phone: '' }, tests: x.tests||[], status: x.status || 'received', tokenNo: x.tokenNo, sampleTime: x.sampleTime, reportingTime: x.reportingTime, returnedTests: Array.isArray(x.returnedTests) ? x.returnedTests : [], referringConsultant: x.referringConsultant }))
+        const o: Order[] = (ordersRes.items||[])
+          .map((x:any)=>({ 
+            id: x._id, 
+            createdAt: x.createdAt || new Date().toISOString(), 
+            patient: x.patient || { fullName: '-', phone: '' }, 
+            tests: x.tests||[], 
+            status: x.status || 'received', 
+            tokenNo: x.tokenNo, 
+            barcode: x.barcode, 
+            sampleTime: x.sampleTime, 
+            reportingTime: x.reportingTime, 
+            returnedTests: Array.isArray(x.returnedTests) ? x.returnedTests : [], 
+            referringConsultant: x.referringConsultant,
+            corporateId: x.corporateId,
+            corporateName: x.corporateName,
+            corporatePreAuthNo: x.corporatePreAuthNo,
+            billingType: x.billingType || (x.corporateId ? 'corporate' : 'cash')
+          }))
+          .filter((x: any)=> String((x as any)?.barcode || '').trim().length > 0)
         setOrders(o)
         setTotal(Number(ordersRes.total || o.length || 0))
         setTotalPages(Number(ordersRes.totalPages || 1))
@@ -146,14 +190,23 @@ export default function Lab_Results() {
   const addRow = () => setRows(prev => [...prev, { id: crypto.randomUUID(), test: '', normal: '', unit: '', value: '', comment: '' }])
   const removeRow = (id: string) => setRows(prev => prev.filter(r => r.id !== id))
 
+  const showNormal = useMemo(() => rows.some(r => String(r.normal || '').trim().length > 0), [rows])
+  const showUnit = useMemo(() => rows.some(r => String(r.unit || '').trim().length > 0), [rows])
+
   const save = async () => {
     if (!selected) return false
     try {
+      let submittedBy: string | undefined
+      try {
+        const raw = localStorage.getItem('lab.session')
+        const session = raw ? JSON.parse(raw) : null
+        submittedBy = String(session?.username || session?.user?.username || session?.name || '').trim() || undefined
+      } catch {}
       if (existingResultId){
         await labApi.updateResult(existingResultId, { rows, interpretation: interpretation.trim() || undefined })
         await labApi.updateOrderTrack(selected.id, { referringConsultant: (referring.trim() || undefined) as any })
       } else {
-        await labApi.createResult({ orderId: selected.id, rows, interpretation: interpretation.trim() || undefined })
+        await labApi.createResult({ orderId: selected.id, rows, interpretation: interpretation.trim() || undefined, submittedBy })
         const rep = new Date().toTimeString().slice(0,5)
         await labApi.updateOrderTrack(selected.id, { status: 'completed', reportingTime: rep, referringConsultant: (referring.trim() || undefined) as any })
       }
@@ -171,7 +224,21 @@ export default function Lab_Results() {
       // Find prior completed orders for this patient (by MRN/phone/name) that include the same test
       const key = o.patient.mrn || o.patient.phone || o.patient.fullName || ''
       const ordRes: any = await labApi.listOrders({ q: key, status: 'completed', limit: 500 })
-      const all: Order[] = (ordRes.items||[]).map((x:any)=>({ id: x._id, createdAt: x.createdAt || new Date().toISOString(), patient: x.patient || { fullName: '-', phone: '' }, tests: x.tests||[], status: x.status || 'received', tokenNo: x.tokenNo, sampleTime: x.sampleTime, reportingTime: x.reportingTime, referringConsultant: x.referringConsultant }))
+      const all: Order[] = (ordRes.items||[]).map((x:any)=>({ 
+        id: x._id, 
+        createdAt: x.createdAt || new Date().toISOString(), 
+        patient: x.patient || { fullName: '-', phone: '' }, 
+        tests: x.tests||[], 
+        status: x.status || 'received', 
+        tokenNo: x.tokenNo, 
+        sampleTime: x.sampleTime, 
+        reportingTime: x.reportingTime, 
+        referringConsultant: x.referringConsultant,
+        corporateId: x.corporateId,
+        corporateName: x.corporateName,
+        corporatePreAuthNo: x.corporatePreAuthNo,
+        billingType: x.billingType || (x.corporateId ? 'corporate' : 'cash')
+      }))
       const samePatient = all.filter(or => {
         const a = o.patient || {}; const b = or.patient || {}
         if (a.mrn && b.mrn) return String(a.mrn) === String(b.mrn)
@@ -225,7 +292,22 @@ export default function Lab_Results() {
           ord = (o2.items||[]).find((x:any)=> String(x._id) === String(orderId)) || null
         }
         if (cancelled || !ord) return
-        const o: Order = { id: ord._id, createdAt: ord.createdAt || new Date().toISOString(), patient: ord.patient || { fullName: '-', phone: '' }, tests: ord.tests||[], status: ord.status || 'received', tokenNo: ord.tokenNo, sampleTime: ord.sampleTime, reportingTime: ord.reportingTime, returnedTests: Array.isArray(ord.returnedTests)? ord.returnedTests: [], referringConsultant: ord.referringConsultant }
+        const o: Order = { 
+          id: ord._id, 
+          createdAt: ord.createdAt || new Date().toISOString(), 
+          patient: ord.patient || { fullName: '-', phone: '' }, 
+          tests: ord.tests||[], 
+          status: ord.status || 'received', 
+          tokenNo: ord.tokenNo, 
+          sampleTime: ord.sampleTime, 
+          reportingTime: ord.reportingTime, 
+          returnedTests: Array.isArray(ord.returnedTests)? ord.returnedTests: [], 
+          referringConsultant: ord.referringConsultant,
+          corporateId: ord.corporateId,
+          corporateName: ord.corporateName,
+          corporatePreAuthNo: ord.corporatePreAuthNo,
+          billingType: ord.billingType || (ord.corporateId ? 'corporate' : 'cash')
+        }
         setSelected(o)
         const tid = o.tests?.[0] ? String(o.tests[0]) : null
         setSelectedTestId(tid)
@@ -263,6 +345,13 @@ export default function Lab_Results() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <input value={q} onChange={e=>{ setQ(e.target.value); setPage(1) }} placeholder="Search by ID, patient, token, CNIC, phone..." className="w-full rounded-md border border-slate-300 pl-9 pr-3 py-2 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200" />
             </div>
+            <div className="relative min-w-[180px]">
+              <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <select value={selectedCompany} onChange={e=>{ setSelectedCompany(e.target.value); setPage(1) }} className="w-full rounded-md border border-slate-300 pl-9 pr-3 py-2 text-sm bg-white">
+                <option value="">All Companies</option>
+                {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
             <select value={rowsPer} onChange={e=>{ setRowsPer(Number(e.target.value)); setPage(1) }} className="rounded-md border border-slate-300 px-2 py-2 text-sm">
               <option value={10}>10</option>
               <option value={20}>20</option>
@@ -278,8 +367,10 @@ export default function Lab_Results() {
                   <th className="px-3 py-2">Date</th>
                   <th className="px-3 py-2">Patient</th>
                   <th className="px-3 py-2">Token</th>
+                  <th className="px-3 py-2">Barcode</th>
                   <th className="px-3 py-2">MR No</th>
                   <th className="px-3 py-2">Test</th>
+                  <th className="px-3 py-2">Billing</th>
                   <th className="px-3 py-2">CNIC</th>
                   <th className="px-3 py-2">Phone</th>
                   <th className="px-3 py-2">Status</th>
@@ -287,7 +378,7 @@ export default function Lab_Results() {
                 </tr>
               </thead>
               <tbody>
-                {items.reduce((acc: any[], o) => {
+                {items.filter(o => !selectedCompany || o.corporateId === selectedCompany).reduce((acc: any[], o) => {
                   const token = (track[o.id]?.tokenNo || genToken(o.createdAt, o.id))
                   const returned = new Set((o.returnedTests||[]).map(String))
                   o.tests.forEach((tid, idx) => {
@@ -299,8 +390,24 @@ export default function Lab_Results() {
                         <td className="px-3 py-2 whitespace-nowrap">{formatDateTime(o.createdAt)}</td>
                         <td className="px-3 py-2 whitespace-nowrap">{o.patient.fullName}</td>
                         <td className="px-3 py-2 whitespace-nowrap">{token}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <div className="flex items-center gap-1 text-xs">
+                            <Barcode className="h-4 w-4 text-slate-400" />
+                            <span className="font-mono">{o.barcode || genBarcode(o)}</span>
+                          </div>
+                        </td>
                         <td className="px-3 py-2 whitespace-nowrap">{o.patient.mrn || '-'}</td>
                         <td className="px-3 py-2">{tname}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {o.billingType === 'corporate' ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-xs text-violet-700" title={o.corporateName || 'Corporate'}>
+                              <Building2 className="h-3 w-3" />
+                              {o.corporateName || 'Corporate'}
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">Cash</span>
+                          )}
+                        </td>
                         <td className="px-3 py-2 whitespace-nowrap">{o.patient.cnic || '-'}</td>
                         <td className="px-3 py-2 whitespace-nowrap">{o.patient.phone || '-'}</td>
                         <td className="px-3 py-2 whitespace-nowrap">
@@ -367,8 +474,8 @@ export default function Lab_Results() {
             <thead className="border-b border-slate-200 bg-slate-50 text-left text-slate-600">
               <tr>
                 <th className="px-3 py-2">Test</th>
-                <th className="px-3 py-2">Normal Value</th>
-                <th className="px-3 py-2">Unit</th>
+                {showNormal ? <th className="px-3 py-2">Normal Value</th> : null}
+                {showUnit ? <th className="px-3 py-2">Unit</th> : null}
                 <th className="px-3 py-2">Previous Result</th>
                 <th className="px-3 py-2">Result</th>
                 <th className="px-3 py-2">Flag</th>
@@ -380,8 +487,8 @@ export default function Lab_Results() {
               {rows.map((r, i) => (
                 <tr key={r.id} className="border-b border-slate-100">
                   <td className="px-3 py-2"><input value={r.test} onChange={e=>setRows(rows=>rows.map((x,idx)=>idx===i?{...x,test:e.target.value}:x))} className="w-full rounded-md border border-slate-300 px-2 py-1.5" /></td>
-                  <td className="px-3 py-2"><input value={r.normal || ''} onChange={e=>setRows(rows=>rows.map((x,idx)=>idx===i?{...x,normal:e.target.value}:x))} className="w-full rounded-md border border-slate-300 px-2 py-1.5" /></td>
-                  <td className="px-3 py-2"><input value={r.unit || ''} onChange={e=>setRows(rows=>rows.map((x,idx)=>idx===i?{...x,unit:e.target.value}:x))} className="w-full rounded-md border border-slate-300 px-2 py-1.5" /></td>
+                  {showNormal ? <td className="px-3 py-2"><input value={r.normal || ''} onChange={e=>setRows(rows=>rows.map((x,idx)=>idx===i?{...x,normal:e.target.value}:x))} className="w-full rounded-md border border-slate-300 px-2 py-1.5" /></td> : null}
+                  {showUnit ? <td className="px-3 py-2"><input value={r.unit || ''} onChange={e=>setRows(rows=>rows.map((x,idx)=>idx===i?{...x,unit:e.target.value}:x))} className="w-full rounded-md border border-slate-300 px-2 py-1.5" /></td> : null}
                   <td className="px-3 py-2"><input value={r.prevValue || ''} onChange={e=>setRows(rows=>rows.map((x,idx)=>idx===i?{...x,prevValue:e.target.value}:x))} className="w-full rounded-md border border-slate-300 px-2 py-1.5 font-semibold" placeholder="Optional" /></td>
                   <td className="px-3 py-2"><input value={r.value || ''} onChange={e=>setRows(rows=>rows.map((x,idx)=>idx===i?{...x,value:e.target.value}:x))} className="w-full rounded-md border border-slate-300 px-2 py-1.5" /></td>
                   <td className="px-3 py-2">

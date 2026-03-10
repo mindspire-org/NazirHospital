@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { aestheticApi, aestheticFinanceApi as financeApi } from '../../utils/api'
+import Toast, { type ToastState } from '../../components/ui/Toast'
 
 export default function Finance_DoctorPayouts(){
   const [doctors, setDoctors] = useState<Array<{ id: string; name: string }>>([])
@@ -11,6 +12,7 @@ export default function Finance_DoctorPayouts(){
   const [memo, setMemo] = useState('')
   const [loading, setLoading] = useState(false)
   const [tick, setTick] = useState(0)
+  const [toast, setToast] = useState<ToastState>(null)
 
   useEffect(()=>{ loadDoctors() }, [])
   useEffect(()=>{ if (doctorId) { loadBalance(); loadPayouts() } else { setBalance(null); setPayouts([]) }}, [doctorId, tick])
@@ -44,8 +46,8 @@ export default function Finance_DoctorPayouts(){
       setAmount('')
       setMemo('')
       setTick(t=>t+1)
-      alert('Payout recorded')
-    } catch (e:any){ alert(e?.message || 'Failed to record payout') }
+      setToast({ type: 'success', message: 'Payout recorded' })
+    } catch (e:any){ setToast({ type: 'error', message: e?.message || 'Failed to record payout' }) }
     finally { setLoading(false) }
   }
 
@@ -118,6 +120,8 @@ export default function Finance_DoctorPayouts(){
           </table>
         </div>
       </div>
+
+      <Toast toast={toast} onClose={()=>setToast(null)} />
     </div>
   )
 }

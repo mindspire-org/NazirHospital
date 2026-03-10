@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { hospitalApi } from '../../utils/api'
+import Toast, { type ToastState } from '../../components/ui/Toast'
 
  type Discharge = {
   id: string
@@ -27,6 +28,7 @@ export default function Hospital_Discharged() {
   const [rowsPerPage, setRowsPerPage] = useState(20)
   const [tick, setTick] = useState(0)
   const [serverRows, setServerRows] = useState<Discharge[]>([])
+  const [toast, setToast] = useState<ToastState>(null)
 
   const apiBase = useMemo(()=>{
     const isFile = typeof window !== 'undefined' && window.location?.protocol === 'file:'
@@ -79,10 +81,10 @@ export default function Hospital_Discharged() {
           try {
             const msg = String(txt||'').slice(0,500)
             if (/No discharge summary found|No death certificate found/i.test(msg)){
-              alert(msg)
+              setToast({ type: 'error', message: msg })
               return
             }
-            alert(msg || 'Failed to load document')
+            setToast({ type: 'error', message: msg || 'Failed to load document' })
             return
           } catch { return }
         }
@@ -204,6 +206,7 @@ export default function Hospital_Discharged() {
           </table>
         </div>
       </div>
+      <Toast toast={toast} onClose={()=>setToast(null)} />
     </div>
   )
 }

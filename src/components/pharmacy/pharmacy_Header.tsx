@@ -13,6 +13,7 @@ export default function Pharmacy_Header({ onToggleSidebar, onToggleTheme, theme,
   const [showNotificationPopup, setShowNotificationPopup] = useState(false)
   const [displayName, setDisplayName] = useState<string>('Admin')
   const showThemeToggle = !!onToggleTheme && (theme === 'light' || theme === 'dark')
+  const dark = theme === 'dark'
 
   useEffect(() => {
     let mounted = true
@@ -66,18 +67,18 @@ export default function Pharmacy_Header({ onToggleSidebar, onToggleTheme, theme,
   const isNavy = variant === 'navy'
   const headerCls = isNavy
     ? 'h-14 w-full'
-    : 'sticky top-0 z-10 h-16 w-full border-b border-slate-200 bg-white/90 backdrop-blur'
+    : 'sticky top-0 z-10 h-16 w-full border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-700 dark:bg-slate-900/80'
   const innerCls = isNavy
     ? 'flex h-full w-full items-center gap-3 px-2 sm:px-3 text-white'
     : 'flex h-full items-center gap-3 px-4 sm:px-6'
   const btnCls = isNavy
     ? 'mr-1 inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/15 bg-white/5 text-white hover:bg-white/10'
-    : 'mr-1 inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50'
+    : 'mr-1 inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'
   const pillCls = isNavy ? 'ml-2 rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium text-white/90' : 'ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700'
-  const metaTextCls = isNavy ? 'hidden items-center gap-2 text-white/80 sm:flex' : 'hidden items-center gap-2 text-slate-600 sm:flex'
+  const metaTextCls = isNavy ? 'hidden items-center gap-2 text-white/80 sm:flex' : 'hidden items-center gap-2 text-slate-600 sm:flex dark:text-slate-300'
   const iconBtnCls = isNavy
     ? 'relative inline-flex h-9 w-9 items-center justify-center rounded-lg text-white/90 hover:bg-white/10 transition-all'
-    : 'relative inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 transition-all'
+    : 'relative inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 transition-all dark:text-slate-300 dark:hover:bg-slate-800'
   const chipWrapCls = isNavy
     ? 'hidden sm:flex items-center rounded-full border border-white/15 bg-white/5 shadow-sm backdrop-blur overflow-hidden'
     : 'hidden sm:flex items-center rounded-full border border-slate-200 bg-white/70 shadow-sm backdrop-blur overflow-hidden'
@@ -91,7 +92,7 @@ export default function Pharmacy_Header({ onToggleSidebar, onToggleTheme, theme,
     : 'inline-flex items-center gap-2 px-3 py-2 text-slate-700 hover:bg-rose-50 hover:text-rose-700 transition'
   const mobileBtnCls = isNavy
     ? 'inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/15 bg-white/5 text-white hover:bg-white/10 sm:hidden'
-    : 'inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 sm:hidden'
+    : 'inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-700 hover:bg-slate-50 sm:hidden dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800'
   const brandNameCls = isNavy ? 'text-xs font-medium text-white/80' : 'text-xs font-medium text-slate-500'
   const brandTitleCls = isNavy
     ? 'text-sm font-bold text-white'
@@ -146,12 +147,13 @@ export default function Pharmacy_Header({ onToggleSidebar, onToggleTheme, theme,
           {showThemeToggle ? (
             <button
               type="button"
+              aria-pressed={dark}
               onClick={() => onToggleTheme?.()}
               className={mobileBtnCls}
               title="Toggle theme"
               aria-label="Toggle theme"
             >
-              <span className="text-xs font-semibold">T</span>
+              <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor' className='h-4 w-4'><path d='M7.5 3h9A2.5 2.5 0 0 1 19 5.5v13A2.5 2.5 0 0 1 16.5 21h-9A2.5 2.5 0 0 1 5 18.5v-13A2.5 2.5 0 0 1 7.5 3Zm0 2A.5.5 0 0 0 7 5.5v13a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-13a.5.5 0 0 0-.5-.5h-9Z'/></svg>
             </button>
           ) : null}
 
@@ -159,11 +161,13 @@ export default function Pharmacy_Header({ onToggleSidebar, onToggleTheme, theme,
             {showThemeToggle ? (
               <button
                 type="button"
+                aria-pressed={dark}
                 onClick={() => onToggleTheme?.()}
                 className={chipBtnCls}
                 title="Toggle theme"
               >
-                <span className="text-sm font-medium">Theme</span>
+                <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor' className='h-4 w-4'><path d='M7.5 3h9A2.5 2.5 0 0 1 19 5.5v13A2.5 2.5 0 0 1 16.5 21h-9A2.5 2.5 0 0 1 5 18.5v-13A2.5 2.5 0 0 1 7.5 3Zm0 2A.5.5 0 0 0 7 5.5v13a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-13a.5.5 0 0 0-.5-.5h-9Z'/></svg>
+                {dark ? 'Dark: On' : 'Dark: Off'}
               </button>
             ) : null}
 

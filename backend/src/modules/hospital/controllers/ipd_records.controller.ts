@@ -596,7 +596,13 @@ export async function createPayment(req: Request, res: Response){
     const { encounterId } = req.params as any
     const enc = await getIPDEncounter(String(encounterId))
     const data = createIpdPaymentSchema.parse(req.body)
-    const row = await HospitalIpdPayment.create({ ...data, encounterId: enc._id, patientId: enc.patientId })
+    const row = await HospitalIpdPayment.create({
+      ...data,
+      encounterId: enc._id,
+      patientId: enc.patientId,
+      createdByUserId: (req as any).user?._id || (req as any).user?.id || undefined,
+      createdByUsername: (req as any).user?.username || undefined,
+    })
 
     // FBR fiscalization (IPD payment receipt)
     try {
@@ -643,8 +649,21 @@ export async function createPayment(req: Request, res: Response){
           }
         } catch {}
       }
-      const tags: any = { encounterId: String(enc._id), patientId: String(enc.patientId) }
+      const tags: any = {
+        encounterId: String(enc._id),
+        patientId: String(enc.patientId),
+        createdByUserId: (req as any).user?._id || (req as any).user?.id || undefined,
+        createdByUsername: (req as any).user?.username || undefined,
+      }
       if (sessionId) tags.sessionId = sessionId
+      // Add patient and department info for transactions display
+      try {
+        const pat: any = await LabPatient.findById((enc as any).patientId).lean()
+        if (pat?.fullName) tags.patientName = String(pat.fullName)
+        if (pat?.mrn) tags.mrn = String(pat.mrn)
+      } catch {}
+      if (enc.departmentId) tags.departmentId = String(enc.departmentId)
+      if (enc.doctorId) tags.doctorId = String(enc.doctorId)
       const debitAccount = isCash ? 'CASH' : 'BANK'
       const lines = [
         { account: debitAccount, debit: Number((row as any).amount||data.amount||0), tags },
@@ -663,8 +682,18 @@ export async function listPayments(req: Request, res: Response){
     const page = Math.max(1, parseInt(String(q.page || '1')) || 1)
     const limit = Math.max(1, Math.min(200, parseInt(String(q.limit || '50')) || 50))
     const total = await HospitalIpdPayment.countDocuments({ encounterId: enc._id })
-    const rows = await HospitalIpdPayment.find({ encounterId: enc._id }).sort({ receivedAt: -1 }).skip((page-1)*limit).limit(limit)
-    res.json({ payments: rows, total, page, limit })
+    const rows = await HospitalIpdPayment.find({ encounterId: enc._id }).sort({ receivedAt: -1 }).skip((page-1)*limit).limit(limit).lean()
+    // Totals for UI summary/reporting
+    let totals: any = undefined
+    try {
+      const items = await HospitalIpdBillingItem.find({ encounterId: enc._id }).select('amount').lean()
+      const pays = await HospitalIpdPayment.find({ encounterId: enc._id }).select('amount').lean()
+      const totalAmount = (items || []).reduce((s: number, x: any) => s + Number(x.amount || 0), 0)
+      const paidAmount = (pays || []).reduce((s: number, x: any) => s + Number(x.amount || 0), 0)
+      const pendingAmount = Math.max(0, totalAmount - paidAmount)
+      totals = { total: totalAmount, paid: paidAmount, pending: pendingAmount }
+    } catch {}
+    res.json({ payments: rows, total, page, limit, totals })
   }catch(e){ return handleError(res, e) }
 }
 export async function updatePayment(req: Request, res: Response){

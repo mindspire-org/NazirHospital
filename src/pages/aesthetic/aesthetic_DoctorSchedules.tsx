@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { aestheticApi } from '../../utils/api'
+import Toast, { type ToastState } from '../../components/ui/Toast'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 function todayIso(){ return new Date().toISOString().slice(0,10) }
 
@@ -31,6 +33,8 @@ export default function Aesthetic_DoctorSchedules(){
   const [slotFor, setSlotFor] = useState<string>('')
   const [slotRows, setSlotRows] = useState<Array<{ slotNo: number; start: string; end: string; status: 'free'|'appt'|'token'; appt?: any }>>([])
   const [slotLoading, setSlotLoading] = useState(false)
+  const [toast, setToast] = useState<ToastState>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string>('')
 
   useEffect(()=>{ (async()=>{
     try{
@@ -58,8 +62,20 @@ export default function Aesthetic_DoctorSchedules(){
   }
 
   const remove = async (id: string)=>{
-    if (!confirm('Delete this schedule?')) return
-    try { await (aestheticApi as any).deleteDoctorSchedule(id); await load() } catch(e:any){ alert(e?.message || 'Failed to delete') }
+    setConfirmDeleteId(id)
+  }
+
+  const confirmDelete = async () => {
+    const id = confirmDeleteId
+    setConfirmDeleteId('')
+    if (!id) return
+    try {
+      await (aestheticApi as any).deleteDoctorSchedule(id)
+      await load()
+      setToast({ type: 'success', message: 'Deleted' })
+    } catch (e: any) {
+      setToast({ type: 'error', message: e?.message || 'Failed to delete' })
+    }
   }
 
   function beginEdit(s: Schedule){
@@ -79,13 +95,14 @@ export default function Aesthetic_DoctorSchedules(){
       })
       setEditingId('')
       await load()
-    }catch(e:any){ alert(e?.message || 'Failed to update schedule') }
+      setToast({ type: 'success', message: 'Updated' })
+    }catch(e:any){ setToast({ type: 'error', message: e?.message || 'Failed to update schedule' }) }
   }
 
   async function saveWeeklyPattern(){
-    if (!doctorId) { alert('Select doctor'); return }
+    if (!doctorId) { setToast({ type: 'error', message: 'Select doctor' }); return }
     if (!/^[0-9a-fA-F]{24}$/.test(String(doctorId))) {
-      alert('Selected doctor has an invalid ID format. Please pick a doctor created in this module.');
+      setToast({ type: 'error', message: 'Selected doctor has an invalid ID format. Please pick a doctor created in this module.' })
       return
     }
     const days = weekly.map((d,i)=>( {
@@ -101,9 +118,9 @@ export default function Aesthetic_DoctorSchedules(){
     setApplying(true)
     try{
       await (aestheticApi as any).applyDoctorWeeklyPattern({ doctorId, anchorDate, weeks: 52, days })
-      alert('Weekly pattern saved')
+      setToast({ type: 'success', message: 'Weekly pattern saved' })
       await load()
-    }catch(e:any){ alert(e?.message || 'Failed to save weekly pattern') }
+    }catch(e:any){ setToast({ type: 'error', message: e?.message || 'Failed to save weekly pattern' }) }
     setApplying(false)
   }
 
@@ -140,6 +157,7 @@ export default function Aesthetic_DoctorSchedules(){
   }
 
   return (
+    <>
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h2 className="text-xl font-semibold text-slate-800">Doctor Schedules</h2>
@@ -219,8 +237,8 @@ export default function Aesthetic_DoctorSchedules(){
             {rows.map(s => {
               const isEdit = editingId === s._id
               return (
-                <>
-                  <tr key={s._id} className="border-b border-slate-100">
+                <Fragment key={s._id}>
+                  <tr className="border-b border-slate-100">
                     <td className="px-3 py-2">{doctors.find(d=>d.id===s.doctorId)?.name || s.doctorId}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       {isEdit ? (
@@ -287,7 +305,7 @@ export default function Aesthetic_DoctorSchedules(){
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               )
             })}
             {rows.length===0 && (
@@ -297,5 +315,15 @@ export default function Aesthetic_DoctorSchedules(){
         </table>
       </div>
     </div>
+    <ConfirmDialog
+      open={!!confirmDeleteId}
+      title="Confirm"
+      message="Delete this schedule?"
+      confirmText="Delete"
+      onCancel={()=>setConfirmDeleteId('')}
+      onConfirm={confirmDelete}
+    />
+    <Toast toast={toast} onClose={()=>setToast(null)} />
+    </>
   )
 }

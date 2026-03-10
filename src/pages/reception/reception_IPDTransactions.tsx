@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { hospitalApi } from '../../utils/api'
-import { Link } from 'react-router-dom'
+import { fmtDateTime12 } from '../../utils/timeFormat'
 
 function currency(n: number){ return `Rs ${Number(n||0).toFixed(2)}` }
 function escapeHtml(x: any){ return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;') }
@@ -41,6 +41,9 @@ export default function Reception_IPDTransactions(){
             method: p.method || '-',
             refNo: p.refNo || '',
             receivedAt: p.receivedAt || p.createdAt || new Date().toISOString(),
+            createdByUsername: p.createdByUsername,
+            createdBy: p.createdBy,
+            receivedBy: p.receivedBy,
           })
         }
       }
@@ -86,33 +89,34 @@ export default function Reception_IPDTransactions(){
     const dt = new Date()
     const total = charges.reduce((sum:number,c:any)=> sum + Number(c.amount||0), 0)
     const linesHtml = charges.map((c:any)=>`<tr><td style="padding:4px 6px;border-bottom:1px solid #e5e7eb">${escapeHtml(c.description||'')}</td><td style="padding:4px 6px;text-align:right;border-bottom:1px solid #e5e7eb">${currency(Number(c.amount||0))}</td></tr>`).join('')
-    const paysHtml = payments.map((p:any)=>`<tr><td style="padding:3px 6px">${new Date(p.receivedAt||dt).toLocaleString()}</td><td style="padding:3px 6px">${escapeHtml(p.method||'-')}</td><td style="padding:3px 6px">${escapeHtml(p.refNo||'')}</td><td style="padding:3px 6px;text-align:right">${currency(Number(p.amount||0))}</td></tr>`).join('')
+    const paysHtml = payments.map((p:any)=>`<tr><td style="padding:3px 6px">${fmtDateTime12(p.receivedAt||dt)}</td><td style="padding:3px 6px">${escapeHtml(p.method||'-')}</td><td style="padding:3px 6px">${escapeHtml(p.refNo||'')}</td><td style="padding:3px 6px;text-align:right">${currency(Number(p.amount||0))}</td></tr>`).join('')
     const paid = payments.reduce((s:number,p:any)=> s + Number(p.amount||0), 0)
     const html = `<!doctype html><html><head><meta charset="utf-8"/><title>IPD Bill Receipt</title>
       <style>
-        @page { size: A5 portrait; margin: 10mm }
-        body{ font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, Arial; color:#0f172a }
-        .wrap{ max-width: 680px; margin: 0 auto }
-        .hdr{ display:grid; grid-template-columns:72px 1fr 72px; align-items:center }
-        .title{ font-size:20px; font-weight:800; text-align:center }
-        .muted{ color:#64748b; font-size:12px; text-align:center }
+        @page { size: A4 portrait; margin: 8mm }
+        body{ font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, Arial; color:#0f172a; font-size:12px; line-height:1.25 }
+        .wrap{ width:100%; max-width: 190mm; margin: 0 auto }
+        .hdr{ display:flex; align-items:center; gap:10px }
+        .logo img{ height:46px; width:auto; object-fit:contain }
+        .hinfo{ text-align:center }
+        .title{ font-size:18px; font-weight:900; line-height:1.1 }
+        .muted{ color:#64748b; font-size:11px }
         .hr{ border-bottom:1px solid #0f172a; margin:6px 0 }
-        .kv{ display:grid; grid-template-columns: 120px 1fr 120px 1fr; gap:4px 10px; font-size:12px }
+        .kv{ display:grid; grid-template-columns: 120px 1fr 120px 1fr; gap:3px 10px; font-size:12px }
         .box{ border:1px solid #e5e7eb; border-radius:8px; padding:6px; margin:8px 0 }
         table{ width:100%; border-collapse:collapse; font-size:12px }
-        th{ background:#f8fafc; text-align:left; padding:6px; border-bottom:1px solid #e5e7eb }
+        th{ background:#f8fafc; text-align:left; padding:5px 6px; border-bottom:1px solid #e5e7eb }
         td{ vertical-align:top }
         .right{ text-align:right }
       </style></head><body>
       <div class="wrap">
         <div class="hdr">
-          <div>${logo? `<img src="${escapeHtml(logo)}" alt="logo" style="height:60px;width:auto;object-fit:contain"/>` : ''}</div>
-          <div>
+          <div class="logo">${logo? `<img src="${escapeHtml(logo)}" alt="logo"/>` : ''}</div>
+          <div class="hinfo" style="flex:1">
             <div class="title">${escapeHtml(name)}</div>
             <div class="muted">${escapeHtml(address)}</div>
             <div class="muted">Ph: ${escapeHtml(phone)}</div>
           </div>
-          <div></div>
         </div>
         <div class="hr"></div>
         <div class="box">
@@ -138,12 +142,12 @@ export default function Reception_IPDTransactions(){
             <tbody>${paysHtml || `<tr><td colspan="4" style="padding:6px">No payments yet</td></tr>`}</tbody>
           </table>
         </div>
-        <div class="box" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="box" style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
           <div><div>SubTotal</div><div class="right">${currency(total)}</div></div>
           <div><div>Paid</div><div class="right">${currency(paid)}</div></div>
-          <div><div><strong>Outstanding</strong></div><div class="right"><strong>${currency(Math.max(0, total - paid))}</strong></div></div>
+          <div style="grid-column:1 / -1"><div><strong>Outstanding</strong></div><div class="right"><strong>${currency(Math.max(0, total - paid))}</strong></div></div>
         </div>
-        <div style="text-align:center;color:#475569;margin-top:10px">System Generated Receipt</div>
+        <div style="text-align:center;color:#475569;margin-top:6px;font-size:10px">System Generated Receipt</div>
       </div>
     </body></html>`
     try{
@@ -157,7 +161,17 @@ export default function Reception_IPDTransactions(){
     }catch{}
   }
 
-  const total = useMemo(()=> rows.reduce((s,r)=> s + Number(r.amount||0), 0), [rows])
+  const [page, setPage] = useState(1)
+  const [rowsPerPage, setRowsPerPage] = useState(20)
+
+  const startIdx = (page - 1) * rowsPerPage
+  const endIdx = startIdx + rowsPerPage
+  const paginatedRows = filtered.slice(startIdx, endIdx)
+  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage))
+  const displayStart = Math.min(startIdx + 1, filtered.length)
+  const displayEnd = Math.min(endIdx, filtered.length)
+
+  const total = useMemo(()=> paginatedRows.reduce((s,r)=> s + Number(r.amount||0), 0), [paginatedRows])
 
   return (
     <div className="space-y-4">
@@ -178,27 +192,62 @@ export default function Reception_IPDTransactions(){
         ) : (
           <div className="overflow-x-auto text-sm">
             <table className="min-w-full">
-              <thead className="bg-slate-50 text-slate-700"><tr><th className="px-2 py-1 text-left">Date/Time</th><th className="px-2 py-1 text-left">Patient</th><th className="px-2 py-1 text-left">MRN</th><th className="px-2 py-1 text-left">Admission</th><th className="px-2 py-1 text-left">Method</th><th className="px-2 py-1 text-left">Ref</th><th className="px-2 py-1 text-right">Amount</th><th className="px-2 py-1 text-left">Actions</th></tr></thead>
+              <thead className="bg-slate-50 text-slate-700"><tr><th className="px-2 py-1 text-left">Date/Time</th><th className="px-2 py-1 text-left">Patient</th><th className="px-2 py-1 text-left">MRN</th><th className="px-2 py-1 text-left">Admission</th><th className="px-2 py-1 text-left">Method</th><th className="px-2 py-1 text-left">Ref</th><th className="px-2 py-1 text-left">Performed By</th><th className="px-2 py-1 text-right">Amount</th><th className="px-2 py-1 text-left">Actions</th></tr></thead>
               <tbody className="divide-y">
-                {filtered.map(r => (
+                {paginatedRows.map(r => (
                   <tr key={r.id}>
-                    <td className="px-2 py-1">{new Date(r.receivedAt).toLocaleString()}</td>
+                    <td className="px-2 py-1">{fmtDateTime12(r.receivedAt)}</td>
                     <td className="px-2 py-1">{r.patientName}</td>
                     <td className="px-2 py-1">{r.mrn}</td>
                     <td className="px-2 py-1">{r.admissionNo}</td>
                     <td className="px-2 py-1">{r.method}</td>
                     <td className="px-2 py-1">{r.refNo}</td>
+                    <td className="px-2 py-1">{r.createdByUsername || r.createdBy || r.receivedBy || '-'}</td>
                     <td className="px-2 py-1 text-right">{currency(r.amount)}</td>
                     <td className="px-2 py-1">
                       <div className="flex items-center gap-2">
                         <button className="btn-outline-navy" onClick={()=>printReceipt(r)}>Print Receipt</button>
-                        <Link className="btn" to={`/reception/ipd-billing?encounterId=${encodeURIComponent(r.encounterId)}`}>Open Billing</Link>
                       </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {/* Pagination Controls */}
+        {filtered.length > 0 && (
+          <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-sm text-slate-600 mt-4">
+            <div className="flex items-center gap-2">
+              <span>Rows per page</span>
+              <select 
+                value={rowsPerPage} 
+                onChange={e=>{setRowsPerPage(parseInt(e.target.value)); setPage(1)}} 
+                className="rounded-md border border-slate-300 px-2 py-1"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
+            <div>Page {page} of {totalPages} ({displayStart}-{displayEnd} of {filtered.length})</div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={()=>setPage(p=>Math.max(1, p-1))} 
+                disabled={page <= 1}
+                className="rounded-md border border-slate-200 px-3 py-1 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Prev
+              </button>
+              <button 
+                onClick={()=>setPage(p=>Math.min(totalPages, p+1))} 
+                disabled={page >= totalPages}
+                className="rounded-md border border-slate-200 px-3 py-1 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
           </div>
         )}
       </div>

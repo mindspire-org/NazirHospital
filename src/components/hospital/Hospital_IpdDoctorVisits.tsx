@@ -1,10 +1,14 @@
 import React, { useEffect, useState } from 'react'
 import { hospitalApi } from '../../utils/api'
+import Toast, { type ToastState } from '../ui/Toast'
+import ConfirmDialog from '../ui/ConfirmDialog'
 
 export default function DoctorVisits({ encounterId }: { encounterId: string }){
   const [rows, setRows] = useState<Array<{ id: string; doctor: string; when: string; done?: boolean }>>([])
   const [open, setOpen] = useState(false)
   const [doctors, setDoctors] = useState<Array<{ _id: string; name: string }>>([])
+  const [toast, setToast] = useState<ToastState>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string>('')
 
   useEffect(()=>{ if(encounterId){ reload() } }, [encounterId])
 
@@ -24,7 +28,8 @@ export default function DoctorVisits({ encounterId }: { encounterId: string }){
       const dt = `${d.date}T${d.time}`
       await hospitalApi.createIpdDoctorVisit(encounterId, { doctorId: d.doctorId, when: dt, category: 'visit' })
       setOpen(false); await reload()
-    }catch(e: any){ alert(e?.message || 'Failed to add doctor visit') }
+      setToast({ type: 'success', message: 'Doctor visit added' })
+    }catch(e: any){ setToast({ type: 'error', message: e?.message || 'Failed to add doctor visit' }) }
   }
 
   async function markDone(id: string){
@@ -32,19 +37,28 @@ export default function DoctorVisits({ encounterId }: { encounterId: string }){
       await hospitalApi.updateIpdDoctorVisit(id, { done: true })
       try { window.dispatchEvent(new CustomEvent('doctor:notifications-updated')) } catch {}
       await reload()
-    } catch (e: any){ alert(e?.message || 'Failed to mark done') }
+      setToast({ type: 'success', message: 'Marked as done' })
+    } catch (e: any){ setToast({ type: 'error', message: e?.message || 'Failed to mark done' }) }
   }
 
   async function removeVisit(id: string){
-    if (!confirm('Delete this doctor visit?')) return
+    setConfirmDeleteId(String(id))
+  }
+
+  async function confirmDelete(){
+    const id = confirmDeleteId
+    setConfirmDeleteId('')
+    if (!id) return
     try {
       await hospitalApi.deleteIpdDoctorVisit(id)
       try { window.dispatchEvent(new CustomEvent('doctor:notifications-updated')) } catch {}
       await reload()
-    } catch (e: any){ alert(e?.message || 'Failed to delete') }
+      setToast({ type: 'success', message: 'Deleted' })
+    } catch (e: any){ setToast({ type: 'error', message: e?.message || 'Failed to delete' }) }
   }
 
   return (
+    <>
     <div className="rounded-xl border border-slate-200 bg-white p-4">
       <div className="mb-2 flex items-center justify-between">
         <div className="text-lg font-semibold text-slate-900">Doctor Visits</div>
@@ -88,6 +102,16 @@ export default function DoctorVisits({ encounterId }: { encounterId: string }){
       )}
       <VisitDialog open={open} onClose={()=>setOpen(false)} onSave={save} doctors={doctors} />
     </div>
+    <ConfirmDialog
+      open={!!confirmDeleteId}
+      title="Confirm"
+      message="Delete this doctor visit?"
+      confirmText="Delete"
+      onCancel={()=>setConfirmDeleteId('')}
+      onConfirm={confirmDelete}
+    />
+    <Toast toast={toast} onClose={()=>setToast(null)} />
+    </>
   )
 }
 

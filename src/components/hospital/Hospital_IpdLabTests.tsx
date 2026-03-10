@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { hospitalApi, labApi } from '../../utils/api'
 import { printLabReport } from '../../utils/printLabReport'
+import Toast, { type ToastState } from '../ui/Toast'
+import ConfirmDialog from '../ui/ConfirmDialog'
 
 export default function LabTests({ encounterId }: { encounterId: string }){
   const [rows, setRows] = useState<Array<{ id: string; test: string; date: string; orderId?: string }>>([])
@@ -10,6 +12,8 @@ export default function LabTests({ encounterId }: { encounterId: string }){
   const [testsMap, setTestsMap] = useState<Record<string,string>>({})
   const [ordersMap, setOrdersMap] = useState<Record<string, any>>({})
   const [resultByOrder, setResultByOrder] = useState<Record<string, any>>({})
+  const [toast, setToast] = useState<ToastState>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string>('')
 
   useEffect(()=>{ if(encounterId){ reload() } }, [encounterId])
   useEffect(()=>{ (async()=>{ try { const res = await hospitalApi.getIPDAdmissionById(encounterId) as any; const enc = res?.encounter; setEncDoctorId(String(enc?.doctorId?._id || enc?.doctorId || '')) } catch {} })() }, [encounterId])
@@ -69,15 +73,37 @@ export default function LabTests({ encounterId }: { encounterId: string }){
         await hospitalApi.createIpdLabLink(encounterId, { testIds: d.test ? [d.test] : undefined, status: 'referred' })
       }
       setOpen(false); await reload()
-    }catch(e: any){ alert(e?.message || 'Failed to refer to lab') }
+      setToast({ type: 'success', message: 'Referred to Lab' })
+    }catch(e: any){ setToast({ type: 'error', message: e?.message || 'Failed to refer to lab' }) }
   }
 
   async function removeLink(id: string){
-    if (!confirm('Delete this lab entry?')) return
-    try{ await hospitalApi.deleteIpdLabLink(String(id)); await reload() }catch(e: any){ alert(e?.message || 'Failed to delete') }
+    setConfirmDeleteId(String(id))
+  }
+
+  async function confirmDelete(){
+    const id = confirmDeleteId
+    setConfirmDeleteId('')
+    if (!id) return
+    try{
+      await hospitalApi.deleteIpdLabLink(String(id))
+      await reload()
+      setToast({ type: 'success', message: 'Deleted' })
+    }catch(e: any){
+      setToast({ type: 'error', message: e?.message || 'Failed to delete' })
+    }
+  }
+
+  async function onPreview(orderId: string){
+    try{
+      await previewReport(orderId)
+    }catch(e: any){
+      setToast({ type: 'error', message: e?.message || 'Failed to open report preview.' })
+    }
   }
 
   return (
+    <>
     <div className="rounded-xl border border-slate-200 bg-white p-4">
       <div className="mb-2 flex items-center justify-between">
         <div className="text-lg font-semibold text-slate-900">Lab Tests</div>
@@ -132,7 +158,7 @@ export default function LabTests({ encounterId }: { encounterId: string }){
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2">
                           {rec && o.orderId ? (
-                            <button onClick={()=>previewReport(o.orderId!)} className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50">Preview</button>
+                            <button onClick={()=>onPreview(o.orderId!)} className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50">Preview</button>
                           ) : (
                             <button disabled className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-400">Preview</button>
                           )}
@@ -149,6 +175,16 @@ export default function LabTests({ encounterId }: { encounterId: string }){
       )}
       <OrderDialog open={open} onClose={()=>setOpen(false)} onSave={save} doctors={doctors} defaultDoctorId={encDoctorId} />
     </div>
+    <ConfirmDialog
+      open={!!confirmDeleteId}
+      title="Confirm"
+      message="Delete this lab entry?"
+      confirmText="Delete"
+      onCancel={()=>setConfirmDeleteId('')}
+      onConfirm={confirmDelete}
+    />
+    <Toast toast={toast} onClose={()=>setToast(null)} />
+    </>
   )
 }
  
@@ -168,7 +204,7 @@ export default function LabTests({ encounterId }: { encounterId: string }){
       } catch {}
     }
     const res = Array.isArray(resultsRes?.items) && resultsRes.items.length ? resultsRes.items[0] : null
-    if (!res) { alert('No report found for this order yet.'); return }
+    if (!res) { throw new Error('No report found for this order yet.') }
     const tokenNo = String(ord?.tokenNo || '-')
     const createdAt = String(ord?.createdAt || res.createdAt || new Date().toISOString())
     const sampleTime = String(ord?.sampleTime || '')
@@ -180,7 +216,7 @@ export default function LabTests({ encounterId }: { encounterId: string }){
     await printLabReport({ tokenNo, createdAt, sampleTime, reportingTime, patient, rows, interpretation, referringConsultant })
   }catch(e){
     try { console.error('Preview failed', e) } catch {}
-    alert('Failed to open report preview.')
+    throw new Error('Failed to open report preview.')
   }
 }
 

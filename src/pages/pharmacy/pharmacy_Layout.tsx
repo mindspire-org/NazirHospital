@@ -5,12 +5,30 @@ import { useEffect, useState } from 'react'
 
 export default function Pharmacy_Layout() {
   const [collapsed, setCollapsed] = useState(false)
-  const theme: 'light' = 'light'
+  const [theme, setTheme] = useState<'light'|'dark'>(() => {
+    try { return (localStorage.getItem('pharmacy.theme') as 'light'|'dark') || 'light' } catch { return 'light' }
+  })
+  useEffect(() => {
+    try { localStorage.setItem('pharmacy.theme', theme) } catch {}
+  }, [theme])
   useEffect(() => {
     const html = document.documentElement
-    try { html.classList.remove('dark') } catch {}
-    return () => { try { html.classList.remove('dark') } catch {} }
+    const forceRemove = () => {
+      try {
+        if (html.classList.contains('dark')) html.classList.remove('dark')
+      } catch {}
+    }
+    forceRemove()
+    let obs: MutationObserver | null = null
+    try {
+      obs = new MutationObserver(() => forceRemove())
+      obs.observe(html, { attributes: true, attributeFilter: ['class'] })
+    } catch {}
+    return () => {
+      try { if (obs) obs.disconnect() } catch {}
+    }
   }, [])
+  const toggleTheme = () => setTheme(t => (t === 'dark' ? 'light' : 'dark'))
   const navigate = useNavigate()
   const location = useLocation()
   useEffect(() => {
@@ -61,15 +79,16 @@ export default function Pharmacy_Layout() {
     window.addEventListener('keydown', onKeyDown as any)
     return () => window.removeEventListener('keydown', onKeyDown as any)
   }, [navigate, location.pathname])
-  const shell = 'h-dvh bg-slate-50 text-slate-900'
+  const shell = theme === 'dark' ? 'h-dvh bg-slate-900 text-slate-100' : 'h-dvh bg-slate-50 text-slate-900'
   return (
-    <div className="pharmacy-scope">
+    <div className={theme === 'dark' ? 'pharmacy-scope dark' : 'pharmacy-scope'}>
       <div className={shell}>
         <div className="sticky top-0 z-20 w-full md:border-b" style={{ background: 'linear-gradient(180deg, var(--navy) 0%, var(--navy-700) 100%)', borderColor: 'rgba(255,255,255,0.12)' }}>
           <div className="flex h-14">
             <Pharmacy_Header
               variant="navy"
               onToggleSidebar={() => setCollapsed(c => !c)}
+              onToggleTheme={toggleTheme}
               theme={theme}
             />
           </div>

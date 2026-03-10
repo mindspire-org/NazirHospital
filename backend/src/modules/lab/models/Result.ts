@@ -14,6 +14,7 @@ const ResultSchema = new Schema({
   orderId: { type: String, required: true, index: true },
   rows: { type: [ResultRowSchema], default: [] },
   interpretation: { type: String },
+  submittedBy: { type: String },
   reportStatus: { type: String, enum: ['pending','approved'], default: 'pending', index: true },
   approvedAt: { type: Date },
   approvedBy: { type: String },
@@ -24,6 +25,7 @@ export type LabResultDoc = {
   orderId: string
   rows: Array<{ test: string; normal?: string; unit?: string; prevValue?: string; value?: string; flag?: 'normal'|'abnormal'|'critical'; comment?: string }>
   interpretation?: string
+  submittedBy?: string
   reportStatus?: 'pending' | 'approved'
   approvedAt?: string
   approvedBy?: string

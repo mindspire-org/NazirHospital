@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { corporateApi, hospitalApi } from '../../../utils/api'
+import Toast, { type ToastState } from '../../../components/ui/Toast'
+import ConfirmDialog from '../../../components/ui/ConfirmDialog'
 
 const STATUSES = ['open','locked','exported','partially-paid','paid','rejected'] as const
 
-type ClaimRow = { _id: string; claimNo?: string; companyId: string; status: typeof STATUSES[number]; totalAmount: number; totalTransactions: number; createdAt?: string; fromDate?: string; toDate?: string }
+type ClaimRow = { _id: string; claimNo?: string; companyId: string; status: typeof STATUSES[number]; totalAmount: number; totalTransactions: number; createdAt?: string; fromDate?: string; toDate?: string; notes?: string }
 
 type TxRow = { _id: string; dateIso?: string; patientMrn?: string; patientName?: string; serviceType: string; description?: string; qty?: number; unitPrice?: number; coPay?: number; netToCorporate?: number }
 
@@ -20,6 +22,21 @@ export default function Hospital_CorporateClaims(){
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(20)
   const [total, setTotal] = useState<number | null>(null)
+  const [toast, setToast] = useState<ToastState>(null)
+  const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; claim: ClaimRow | null } | null>(null)
+  
+  // Transaction selection for claim generation
+  const [availableTx, setAvailableTx] = useState<TxRow[]>([])
+  const [selectedTxIds, setSelectedTxIds] = useState<Set<string>>(new Set())
+  const [txLoading, setTxLoading] = useState(false)
+  const [txPage, setTxPage] = useState(1)
+  const [txLimit, setTxLimit] = useState(20)
+  const [txTotal, setTxTotal] = useState(0)
+  
+  // Edit claim modal
+  const [editClaim, setEditClaim] = useState<ClaimRow | null>(null)
+  const [editStatus, setEditStatus] = useState<typeof STATUSES[number]>('open')
+  const [editNotes, setEditNotes] = useState('')
 
   useEffect(()=>{ (async()=>{ try{ const r = await corporateApi.listCompanies() as any; setCompanies((r?.companies||[]).map((c:any)=>({ id: String(c._id||c.id), name: c.name })))}catch{} })() }, [])
   useEffect(()=>{ (async()=>{ try{ const r:any = await hospitalApi.listDepartments(); const arr:any[] = (r?.departments || r?.data || []) as any[]; setDepartments(arr.map((d:any)=>({ id: String(d._id||d.id), name: d.name })))}catch{} })() }, [])
@@ -36,6 +53,7 @@ export default function Hospital_CorporateClaims(){
     setLoading(false)
   }
   useEffect(()=>{ load() }, [page, limit])
+  useEffect(()=>{ loadAvailableTransactions() }, [filters.companyId, txPage, txLimit])
 
   const totalAmount = useMemo(()=> (rows||[]).reduce((s,r)=> s + Number(r.totalAmount||0), 0), [rows])
 
@@ -47,29 +65,14 @@ export default function Hospital_CorporateClaims(){
     } catch { setSelectedTx([]) }
   }
 
-  async function generate(){
-    const companyId = filters.companyId || (companies[0]?.id || '')
-    if (!companyId){ alert('Select a company first'); return }
-    try {
-      await corporateApi.generateClaim({
-        companyId,
-        fromDate: filters.from || undefined,
-        toDate: filters.to || undefined,
-        patientMrn: (gen.patientMrn||'') || undefined,
-        departmentId: (gen.departmentId||'') || undefined,
-        serviceType: (gen.serviceType as any) || undefined,
-      })
-      await load()
-    } catch (e: any){ alert(e?.message || 'Failed to generate claim') }
-  }
-
   async function lockUnlock(c: ClaimRow){
     try {
       if (c.status === 'locked') await corporateApi.unlockClaim(String(c._id))
       else await corporateApi.lockClaim(String(c._id))
       await load()
       if (selected && String(selected._id) === String(c._id)) await selectClaim(c)
-    } catch (e: any){ alert(e?.message || 'Failed to update claim') }
+      setToast({ type: 'success', message: 'Updated' })
+    } catch (e: any){ setToast({ type: 'error', message: e?.message || 'Failed to update claim' }) }
   }
 
   function exportCsv(c: ClaimRow){
@@ -77,13 +80,21 @@ export default function Hospital_CorporateClaims(){
   }
 
   async function removeClaim(c: ClaimRow){
-    const ok = confirm(`Delete claim ${c.claimNo || String((c as any)._id).slice(-6)}? This cannot be undone.`)
-    if (!ok) return
+    setConfirmDelete({ open: true, claim: c })
+  }
+
+  async function confirmRemoveClaim(){
+    const c = confirmDelete?.claim
+    setConfirmDelete(null)
+    if (!c?._id) return
     try {
       await corporateApi.deleteClaim(String(c._id))
       if (selected && String(selected._id) === String(c._id)) setSelected(null)
       await load()
-    } catch (e: any){ alert(e?.message || 'Failed to delete claim') }
+      setToast({ type: 'success', message: 'Deleted' })
+    } catch (e: any){
+      setToast({ type: 'error', message: e?.message || 'Failed to delete claim' })
+    }
   }
 
   async function printDeptWise(c: ClaimRow){
@@ -148,7 +159,7 @@ export default function Hospital_CorporateClaims(){
       const w = window.open('', '_blank', 'width=1024,height=768')
       if (!w) return
       w.document.open(); w.document.write(html); w.document.close(); w.focus(); w.print();
-    } catch (e: any){ alert(e?.message || 'Failed to render print') }
+    } catch (e: any){ setToast({ type: 'error', message: e?.message || 'Failed to render print' }) }
   }
 
   async function printPatientWise(c: ClaimRow){
@@ -209,10 +220,92 @@ export default function Hospital_CorporateClaims(){
       const w = window.open('', '_blank', 'width=1024,height=768')
       if (!w) return
       w.document.open(); w.document.write(html); w.document.close(); w.focus(); w.print();
-    } catch (e: any){ alert(e?.message || 'Failed to render print') }
+    } catch (e: any){ setToast({ type: 'error', message: e?.message || 'Failed to render print' }) }
+  }
+
+  // Load available transactions for selection
+  async function loadAvailableTransactions(){
+    const companyId = filters.companyId || ''
+
+    setTxLoading(true)
+    try {
+      const payload: any = {
+        status: 'accrued',
+        page: txPage,
+        limit: txLimit,
+      }
+      if (companyId) payload.companyId = companyId
+
+      const res: any = await corporateApi.listTransactions(payload) as any
+      const txs = res?.transactions || res?.items || []
+      setAvailableTx(txs)
+      setTxTotal(res?.total || txs.length)
+    } catch (e: any) {
+      setToast({ type: 'error', message: e?.message || 'Failed to load transactions' })
+    }
+    setTxLoading(false)
+  }
+
+  function toggleTxSelection(txId: string){
+    setSelectedTxIds(prev => {
+      const next = new Set(prev)
+      if (next.has(txId)) next.delete(txId)
+      else next.add(txId)
+      return next
+    })
+  }
+
+  function selectAllTxs(){
+    setSelectedTxIds(new Set(availableTx.map(t => String(t._id))))
+  }
+
+  function deselectAllTxs(){
+    setSelectedTxIds(new Set())
+  }
+
+  async function generateWithSelection(){
+    if (selectedTxIds.size === 0){ setToast({ type: 'error', message: 'Select at least one transaction' }); return }
+    
+    const companyId = filters.companyId || (companies[0]?.id || '')
+    if (!companyId){ setToast({ type: 'error', message: 'Select a company first' }); return }
+    
+    try {
+      await corporateApi.generateClaim({
+        companyId,
+        fromDate: filters.from || undefined,
+        toDate: filters.to || undefined,
+        transactionIds: Array.from(selectedTxIds)
+      })
+      await load()
+      setSelectedTxIds(new Set())
+      setToast({ type: 'success', message: `Claim generated with ${selectedTxIds.size} transactions` })
+    } catch (e: any){ setToast({ type: 'error', message: e?.message || 'Failed to generate claim' }) }
+  }
+
+  function openEditClaim(c: ClaimRow){
+    setEditClaim(c)
+    setEditStatus(c.status)
+    setEditNotes(c.notes || '')
+  }
+
+  async function saveEditClaim(){
+    if (!editClaim) return
+    try {
+      await corporateApi.updateClaim(String(editClaim._id), { 
+        status: editStatus,
+        notes: editNotes
+      })
+      await load()
+      if (selected && String(selected._id) === String(editClaim._id)) await selectClaim(editClaim)
+      setEditClaim(null)
+      setToast({ type: 'success', message: 'Claim updated' })
+    } catch (e: any) {
+      setToast({ type: 'error', message: e?.message || 'Failed to update claim' })
+    }
   }
 
   return (
+    <>
     <div className="space-y-6">
       <h2 className="text-xl font-semibold text-slate-800">Corporate Claims</h2>
 
@@ -262,9 +355,8 @@ export default function Hospital_CorporateClaims(){
               <option value="IPD">IPD</option>
             </select>
           </div>
-          <div className="flex items-end gap-2">
+          <div className="flex items-end gap-2 md:col-span-7">
             <button onClick={()=>{ setPage(1); load() }} className="rounded-md bg-violet-700 px-3 py-2 text-sm font-medium text-white">Apply</button>
-            <button onClick={generate} className="rounded-md border border-slate-300 px-3 py-2 text-sm">Generate Claim</button>
           </div>
         </div>
       </section>
@@ -304,11 +396,25 @@ export default function Hospital_CorporateClaims(){
                       <td className="px-2 py-2">{range}</td>
                       <td className="px-2 py-2 text-right">{r.totalTransactions||0}</td>
                       <td className="px-2 py-2 text-right">{formatPKR(Number(r.totalAmount||0))}</td>
-                      <td className="px-2 py-2">{r.status}</td>
-                      <td className="px-2 py-2 space-x-2">
+                      <td className="px-2 py-2">
+                        <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${
+                          r.status === 'paid' ? 'bg-green-100 text-green-700' :
+                          r.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                          r.status === 'locked' ? 'bg-amber-100 text-amber-700' :
+                          r.status === 'exported' ? 'bg-blue-100 text-blue-700' :
+                          'bg-slate-100 text-slate-700'
+                        }`}>{r.status}</span>
+                      </td>
+                      <td className="px-2 py-2 space-x-1">
                         <button onClick={()=>lockUnlock(r)} className="rounded-md border border-slate-300 px-2 py-1 text-xs">{r.status==='locked' ? 'Unlock' : 'Lock'}</button>
+                        <button onClick={()=>openEditClaim(r)} className="rounded-md border border-slate-300 px-2 py-1 text-xs">Edit</button>
                         <button onClick={()=>exportCsv(r)} className="rounded-md border border-slate-300 px-2 py-1 text-xs">Export CSV</button>
-                        <button onClick={()=>removeClaim(r)} className="rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-600">Delete</button>
+                        <button 
+                          onClick={()=>removeClaim(r)} 
+                          disabled={r.status !== 'open'}
+                          title={r.status !== 'open' ? 'Unlock claim before deleting' : ''}
+                          className="rounded-md border border-rose-300 px-2 py-1 text-xs text-rose-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >Delete</button>
                         <button onClick={()=>printDeptWise(r)} className="rounded-md border border-slate-300 px-2 py-1 text-xs">Print Dept</button>
                         <button onClick={()=>printPatientWise(r)} className="rounded-md border border-slate-300 px-2 py-1 text-xs">Print Patients</button>
                       </td>
@@ -376,6 +482,160 @@ export default function Hospital_CorporateClaims(){
         </section>
       )}
     </div>
+    <ConfirmDialog
+      open={!!confirmDelete?.open}
+      title="Confirm"
+      message={confirmDelete?.claim ? `Delete claim ${confirmDelete.claim.claimNo || String((confirmDelete.claim as any)._id).slice(-6)}? This will revert all transactions back to accrued status.` : 'Delete this claim?'}
+      confirmText="Delete"
+      onCancel={()=>setConfirmDelete(null)}
+      onConfirm={confirmRemoveClaim}
+    />
+
+    {/* Transaction Selection Section - Inline */}
+    <section className="rounded-lg border border-violet-200 bg-white p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-slate-800">Select Transactions for Claim</h3>
+      </div>
+        
+        <div className="mb-3 flex items-center gap-3">
+          <button onClick={selectAllTxs} className="rounded-md border border-slate-300 px-3 py-1 text-sm">Select All</button>
+          <button onClick={deselectAllTxs} className="rounded-md border border-slate-300 px-3 py-1 text-sm">Deselect All</button>
+          <span className="text-sm text-slate-600">
+            Selected: {selectedTxIds.size} transactions
+          </span>
+        </div>
+
+        {txLoading && <div className="text-sm text-slate-500">Loading...</div>}
+        {!txLoading && availableTx.length === 0 && <div className="text-sm text-slate-500">No available transactions</div>}
+        {!txLoading && availableTx.length > 0 && (
+          <>
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50">
+                <tr className="text-left text-slate-600">
+                  <th className="px-3 py-2 w-10">Select</th>
+                  <th className="px-3 py-2">Date</th>
+                  <th className="px-3 py-2">MRN</th>
+                  <th className="px-3 py-2">Patient</th>
+                  <th className="px-3 py-2">Service</th>
+                  <th className="px-3 py-2">Description</th>
+                  <th className="px-3 py-2 text-right">Net Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {availableTx.map(t => (
+                  <tr key={String(t._id)} className={`border-t border-slate-100 ${selectedTxIds.has(String(t._id)) ? 'bg-violet-50' : ''}`}>
+                    <td className="px-3 py-2">
+                      <input 
+                        type="checkbox" 
+                        checked={selectedTxIds.has(String(t._id))}
+                        onChange={()=>toggleTxSelection(String(t._id))}
+                        className="h-4 w-4 rounded border-slate-300"
+                      />
+                    </td>
+                    <td className="px-3 py-2">{t.dateIso || '-'}</td>
+                    <td className="px-3 py-2">{t.patientMrn || '-'}</td>
+                    <td className="px-3 py-2">{t.patientName || '-'}</td>
+                    <td className="px-3 py-2">{t.serviceType || '-'}</td>
+                    <td className="px-3 py-2">{t.description || '-'}</td>
+                    <td className="px-3 py-2 text-right font-medium">{formatPKR(Number(t.netToCorporate||0))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          
+          <div className="mt-3 flex items-center justify-between">
+            <div className="text-xs text-slate-600">Page {txPage} of {Math.max(1, Math.ceil(txTotal/txLimit))}</div>
+            <div className="flex items-center gap-2">
+              <select
+                value={txLimit}
+                onChange={e=>{ setTxLimit(Number(e.target.value)); setTxPage(1) }}
+                className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+              </select>
+              <button 
+                onClick={()=> setTxPage(p=>Math.max(1,p-1))} 
+                disabled={txPage<=1} 
+                className="rounded-md border border-slate-300 px-2 py-1 text-xs disabled:opacity-50"
+              >Prev</button>
+              <button 
+                onClick={()=> setTxPage(p=>p+1)} 
+                disabled={txPage>=Math.ceil(txTotal/txLimit)} 
+                className="rounded-md border border-slate-300 px-2 py-1 text-xs disabled:opacity-50"
+              >Next</button>
+            </div>
+          </div>
+          </>
+        )}
+
+        <div className="mt-4 flex items-center justify-end gap-2">
+          <button 
+            onClick={generateWithSelection} 
+            disabled={selectedTxIds.size === 0}
+            className="rounded-md bg-violet-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          >
+            Generate Claim ({selectedTxIds.size} transactions)
+          </button>
+        </div>
+      </section>
+
+    {/* Edit Claim Modal */}
+    {editClaim && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
+          <h3 className="mb-4 text-lg font-semibold text-slate-800">Edit Claim</h3>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Claim #</label>
+              <div className="text-sm text-slate-600">{editClaim.claimNo || String(editClaim._id).slice(-6)}</div>
+            </div>
+            
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Status</label>
+              <select 
+                value={editStatus} 
+                onChange={e=>setEditStatus(e.target.value as typeof STATUSES[number])}
+                className="w-full rounded-md border border-slate-300 px-3 py-2"
+              >
+                {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+              {editStatus === 'rejected' && (
+                <p className="mt-1 text-xs text-amber-600">Warning: Rejecting will revert all transactions back to accrued status.</p>
+              )}
+            </div>
+            
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Notes</label>
+              <textarea 
+                value={editNotes}
+                onChange={e=>setEditNotes(e.target.value)}
+                className="w-full rounded-md border border-slate-300 px-3 py-2"
+                rows={3}
+                placeholder="Optional notes..."
+              />
+            </div>
+          </div>
+
+          <div className="mt-6 flex items-center justify-end gap-2">
+            <button onClick={()=>setEditClaim(null)} className="rounded-md border border-slate-300 px-4 py-2 text-sm">Cancel</button>
+            <button 
+              onClick={saveEditClaim}
+              className="rounded-md bg-violet-700 px-4 py-2 text-sm font-medium text-white"
+            >
+              Save Changes
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    <Toast toast={toast} onClose={()=>setToast(null)} />
+    </>
   )
 }
 

@@ -118,7 +118,7 @@ export default function Pharmacy_AddInvoicePage() {
 
   const [invoiceNo, setInvoiceNo] = useState('')
 
-  const [invoiceDate, setInvoiceDate] = useState('')
+  const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().slice(0, 10))
 
   const [showTaxSection, setShowTaxSection] = useState(false)
 
@@ -1200,7 +1200,7 @@ export default function Pharmacy_AddInvoicePage() {
 
       {/* Main Content */}
 
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+      <div className="mx-auto max-w-full px-4 sm:px-6 lg:px-8 py-8">
 
         <div className="grid gap-6 lg:grid-cols-3">
 

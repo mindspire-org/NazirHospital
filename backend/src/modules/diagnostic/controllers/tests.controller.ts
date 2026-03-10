@@ -4,31 +4,21 @@ import { diagnosticTestCreateSchema, diagnosticTestQuerySchema, diagnosticTestUp
 
 export async function list(req: Request, res: Response){
   const q = diagnosticTestQuerySchema.safeParse(req.query)
-  const { q: search, status, page, limit, lite } = q.success ? q.data as any : {}
+  const { q: search, page, limit } = q.success ? q.data as any : {}
   const filter: any = {}
   if (search){
     const rx = new RegExp(String(search), 'i')
-    filter.$or = [ { name: rx }, { category: rx } ]
+    filter.$or = [ { name: rx } ]
   }
-  if (status) filter.status = status
   const lim = Math.min(1000, Number(limit || 100))
   const pg = Math.max(1, Number(page || 1))
   const skip = (pg - 1) * lim
-  const query = DiagnosticTest.find(filter).sort({ createdAt: -1 }).skip(skip).limit(lim)
-  if (lite) query.select('name price category status createdAt updatedAt')
   const [items, total] = await Promise.all([
-    query.lean(),
+    DiagnosticTest.find(filter).sort({ createdAt: -1 }).skip(skip).limit(lim).lean(),
     DiagnosticTest.countDocuments(filter),
   ])
   const totalPages = Math.max(1, Math.ceil((total||0)/lim))
   res.json({ items, total, page: pg, totalPages })
-}
-
-export async function get(req: Request, res: Response){
-  const { id } = req.params
-  const doc = await DiagnosticTest.findById(id).lean()
-  if (!doc) return res.status(404).json({ message: 'Test not found' })
-  res.json(doc)
 }
 
 export async function create(req: Request, res: Response){

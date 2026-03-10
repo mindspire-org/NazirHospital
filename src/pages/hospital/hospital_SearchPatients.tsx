@@ -8,6 +8,7 @@ import { printEchocardiographyReport } from '../../components/diagnostic/diagnos
 import { printColonoscopyReport } from '../../components/diagnostic/diagnostic_Colonoscopy'
 import { printUpperGIEndoscopyReport } from '../../components/diagnostic/diagnostic_UpperGIEndoscopy'
 import { previewLabReportPdf } from '../../utils/printLabReport'
+import Toast, { type ToastState } from '../../components/ui/Toast'
 
 export default function Hospital_SearchPatients() {
   const location = useLocation()
@@ -23,6 +24,7 @@ export default function Hospital_SearchPatients() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [details, setDetails] = useState<Record<string, { pres?: any[]; lab?: any[]; diag?: any[]; ipd?: any[]; aesthetic?: any[]; loading?: boolean }>>({})
   const [busy, setBusy] = useState<{ pres?: string; lab?: string; diag?: string }>({})
+  const [toast, setToast] = useState<ToastState>(null)
 
   const update = (k: keyof typeof form, v: string) => setForm(prev => ({ ...prev, [k]: v }))
 
@@ -129,7 +131,7 @@ export default function Hospital_SearchPatients() {
         createdAt: pres?.createdAt,
       }, tpl)
     } catch (e) {
-      alert('Failed to generate prescription PDF')
+      setToast({ type: 'error', message: 'Failed to generate prescription PDF' })
     } finally {
       setBusy(prev => ({ ...prev, pres: undefined }))
     }
@@ -164,9 +166,9 @@ export default function Hospital_SearchPatients() {
       if (key === 'CTScan'){ await printCTScanReport(payload as any); return }
       if (key === 'Colonoscopy'){ await printColonoscopyReport(payload as any); return }
       if (key === 'UpperGiEndoscopy'){ await printUpperGIEndoscopyReport(payload as any); return }
-      alert('Unknown diagnostic template for this test')
+      setToast({ type: 'error', message: 'Unknown diagnostic template for this test' })
     } catch(e: any){
-      alert(e?.message || 'Failed to open diagnostic report')
+      setToast({ type: 'error', message: e?.message || 'Failed to open diagnostic report' })
     } finally {
       setBusy(prev => ({ ...prev, diag: undefined }))
     }
@@ -193,7 +195,7 @@ export default function Hospital_SearchPatients() {
         referringConsultant: ord.referringConsultant,
       })
     } catch (e: any) {
-      alert(e?.message || 'Failed to open lab report PDF')
+      setToast({ type: 'error', message: e?.message || 'Failed to open lab report PDF' })
     } finally {
       setBusy(prev => ({ ...prev, lab: undefined }))
     }
@@ -311,7 +313,7 @@ export default function Hospital_SearchPatients() {
       const esc = (x:any)=> String(x==null?'':x).replace(/[&<>"']/g, c=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'} as any)[c])
       const fmt = (d?:string,t?:string)=>{ try{ const dt = (d||'') + (t? ('T'+t):''); const x = new Date(dt||enc.startAt); if(!x||isNaN(x.getTime())) return ''; return x.toLocaleDateString()+', '+x.toLocaleTimeString() }catch{return ''} }
       const logo = s?.logoDataUrl ? `<img src="${esc(s.logoDataUrl)}" style="height:60px;object-fit:contain"/>` : ''
-      const html = `<!doctype html><html><head><meta charset=\"utf-8\"/><style>@page{size:A4;margin:12mm}body{font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial;color:#111}.wrap{padding:0 4mm}.hdr{display:grid;grid-template-columns:96px 1fr 96px;align-items:center}.title{font-size:22px;font-weight:800;text-align:center}.muted{color:#475569;font-size:12px;text-align:center}.hr{border-bottom:2px solid #0f172a;margin:6px 0}.box{border:1px solid #e2e8f0;border-radius:10px;padding:6px;margin:8px 0}.kv{display:grid;grid-template-columns: 130px minmax(0,1fr) 130px minmax(0,1fr) 130px minmax(0,1fr);gap:4px 10px;font-size:12px;align-items:start}.kv>div:nth-child(2n){word-break:break-word}.sec{margin-top:6px}.sec .lbl{font-weight:700;margin-bottom:2px}</style></head><body><div class=wrap>
+      const html = `<!doctype html><html><head><meta charset="utf-8"/><style>@page{size:A4;margin:12mm}body{font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Arial;color:#111}.wrap{padding:0 4mm}.hdr{display:grid;grid-template-columns:96px 1fr 96px;align-items:center}.title{font-size:22px;font-weight:800;text-align:center}.muted{color:#475569;font-size:12px;text-align:center}.hr{border-bottom:2px solid #0f172a;margin:6px 0}.box{border:1px solid #e2e8f0;border-radius:10px;padding:6px;margin:8px 0}.kv{display:grid;grid-template-columns: 130px minmax(0,1fr) 130px minmax(0,1fr) 130px minmax(0,1fr);gap:4px 10px;font-size:12px;align-items:start}.kv>div:nth-child(2n){word-break:break-word}.sec{margin-top:6px}.sec .lbl{font-weight:700;margin-bottom:2px}</style></head><body><div class=wrap>
       <div class=hdr><div>${logo}</div><div><div class=title>${esc(s.name||'Hospital')}</div><div class=muted>${esc(s.address||'-')}</div><div class=muted>Ph: ${esc(s.phone||'')} ${s.email? ' • '+esc(s.email):''}</div></div><div></div></div>
       <div class=hr></div>
       <div class=box><div class=kv>
@@ -332,7 +334,7 @@ export default function Hospital_SearchPatients() {
       <script>window.print && setTimeout(()=>window.print(),200)</script>
       </div></body></html>`
       const w = window.open('', '_blank'); if(!w) return; w.document.open(); w.document.write(html); w.document.close(); w.focus()
-    } catch { alert('Failed to open short-stay preview') }
+    } catch { setToast({ type: 'error', message: 'Failed to open short-stay preview' }) }
   }
 
   return (
@@ -537,6 +539,7 @@ export default function Hospital_SearchPatients() {
           </div>
         </div>
       )}
+      <Toast toast={toast} onClose={()=>setToast(null)} />
     </div>
   )
 }

@@ -2,20 +2,9 @@ import { labApi } from '../../api'
 
 export type LabReportRow = { test: string; normal?: string; unit?: string; value?: string; prevValue?: string; flag?: 'normal'|'abnormal'|'critical'; comment?: string }
 
-async function makeQrPng(text: string, size = 128): Promise<string> {
-  try {
-    const mod: any = await import('qrcode')
-    const toDataURL: any = (mod && typeof mod.toDataURL === 'function') ? mod.toDataURL : (mod?.default?.toDataURL)
-    if (typeof toDataURL === 'function'){
-      const dataUrl = await toDataURL(String(text || ''), { errorCorrectionLevel: 'M', margin: 0, width: size })
-      return String(dataUrl || '')
-    }
-  } catch {}
-  return ''
-}
-
 export type LabReportInput = {
   tokenNo: string
+  barcode?: string
   createdAt: string
   sampleTime?: string
   reportingTime?: string
@@ -67,6 +56,26 @@ async function makeHorizontalGradient(width: number, height: number, stops?: Arr
   return canvas.toDataURL('image/png')
 }
 
+async function makeBarcodeDataUrl(text: string): Promise<string> {
+  const value = String(text || '').trim()
+  if (!value) return ''
+  try {
+    const canvas = document.createElement('canvas')
+    const mod: any = await import('jsbarcode')
+    const JsBarcode: any = (mod && typeof mod === 'function') ? mod : mod?.default
+    if (typeof JsBarcode !== 'function') return ''
+    JsBarcode(canvas, value, {
+      format: 'CODE128',
+      displayValue: false,
+      height: 48,
+      margin: 0,
+    })
+    return canvas.toDataURL('image/png')
+  } catch {
+    return ''
+  }
+}
+
 function fmtDateTime(iso?: string){
   if (!iso) return '-'
   if (/^\d{1,2}:\d{2}$/.test(String(iso))) return String(iso)
@@ -74,17 +83,31 @@ function fmtDateTime(iso?: string){
 }
 
 function pickColumns(rows: LabReportRow[]) {
-  const hasPrev = (rows||[]).some(r => (r.prevValue || '').trim().length > 0)
-  const hasFlag = (rows||[]).some(r => (r.flag || '').length > 0)
-  const hasComment = (rows||[]).some(r => (r.comment || '').trim().length > 0)
+  // Filter out completely empty rows so they don't force columns to render
+  const nonEmptyRows = (rows||[]).filter(r =>
+    (r.value || '').trim().length > 0 ||
+    (r.normal || '').trim().length > 0 ||
+    (r.unit || '').trim().length > 0 ||
+    (r.prevValue || '').trim().length > 0 ||
+    (r.flag || '').trim().length > 0 ||
+    (r.comment || '').trim().length > 0
+  )
+  const hasPrev = nonEmptyRows.some(r => (r.prevValue || '').trim().length > 0)
+  const hasFlag = nonEmptyRows.some(r => (r.flag || '').length > 0)
+  const hasComment = nonEmptyRows.some(r => (r.comment || '').trim().length > 0)
+  const hasNormal = nonEmptyRows.some(r => (r.normal || '').trim().length > 0)
+  const hasUnit = nonEmptyRows.some(r => (r.unit || '').trim().length > 0)
   const head = [
-    ['Test','Normal Value','Unit', ...(hasPrev? ['Previous'] : []), 'Result', ...(hasFlag? ['Flag'] : []), ...(hasComment? ['Comment'] : [])]
+    ['Test', ...(hasNormal? ['Normal Value'] : []), ...(hasUnit? ['Unit'] : []), ...(hasPrev? ['Previous'] : []), 'Result', ...(hasFlag? ['Flag'] : []), ...(hasComment? ['Comment'] : [])]
   ]
-  const body = (rows||[]).map(r => [
-    r.test||'', r.normal||'', r.unit||'', ...(hasPrev? [r.prevValue||''] : []), r.value||'', ...(hasFlag? [r.flag||''] : []), ...(hasComment? [r.comment||''] : [])
+  const body = nonEmptyRows.map(r => [
+    r.test||'', ...(hasNormal? [r.normal||''] : []), ...(hasUnit? [r.unit||''] : []), ...(hasPrev? [r.prevValue||''] : []), r.value||'', ...(hasFlag? [r.flag||''] : []), ...(hasComment? [r.comment||''] : [])
   ])
-  const idxPrev = hasPrev ? 3 : -1
-  const idxFlag = hasFlag ? (hasPrev ? 5 : 4) : -1
+  let idx = 1
+  if (hasNormal) idx++
+  if (hasUnit) idx++
+  const idxPrev = hasPrev ? idx++ : -1
+  const idxFlag = hasFlag ? idx + 1 : -1
   return { head, body, idxPrev, idxFlag }
 }
 
@@ -151,84 +174,38 @@ export async function previewLabReportPdfGradient(input: LabReportInput){
   // White tile behind logo
   doc.setFillColor(255,255,255); doc.roundedRect(cardX + 10, y + 10, 64, 64, 8, 8, 'F')
   if (logo){ try { const normalized = await ensurePngDataUrl(logo); doc.addImage(normalized, 'PNG' as any, cardX + 14, y + 14, 56, 56, undefined, 'FAST') } catch {} }
-  doc.setTextColor(255,255,255)
-  const chipY = y + 20
-  const chipH = 18
-  const prevSizeA = doc.getFontSize()
-  doc.setFontSize(9)
-  const measureChip = (label: string, value: string) => {
-    const labelW = doc.getTextWidth(label + ' ')
-    const valW = doc.getTextWidth(value)
-    const pad = 8
-    return { w: labelW + valW + pad*2, labelW, pad }
-  }
-  const labVal = String(input.tokenNo || '-')
-  const qrX = cardX + cardW - 62
-  const qrY = y + 34
-  const qrSize = 48
-  const limitX = qrX - 8
-  const labW = measureChip('Lab No: ', labVal).w
-  const xLab = limitX - labW
-  doc.setFontSize(prevSizeA)
-
+  const leftX = cardX + 10 + 64 + 16
   doc.setTextColor(255,255,255)
   doc.setFont('helvetica','bold')
-  const leftBound = cardX + 10 + 64 + 16
-  const rightBound = xLab - 6
-  const centerX = (leftBound + rightBound) / 2
-  const baseTitleSize = 18
-  doc.setFontSize(baseTitleSize)
-  const upper = String(labName).toUpperCase()
-  const titleW = doc.getTextWidth(upper)
-  const allowLeft = Math.max(1, centerX - leftBound)
-  const allowRight = Math.max(1, rightBound - centerX)
-  const allowedHalf = Math.min(allowLeft, allowRight)
-  const allowedW = Math.max(1, allowedHalf * 2)
-  const scale = Math.min(1, allowedW / Math.max(1, titleW))
-  const finalTitleSize = Math.max(12, Math.min(18, baseTitleSize * scale))
-  doc.setFontSize(finalTitleSize); doc.text(upper, centerX, y + 28, { align: 'center' })
-  const depBase = 11
-  doc.setFontSize(depBase)
-  const depW = doc.getTextWidth(String(department))
-  const depScale = Math.min(1, allowedW / Math.max(1, depW))
-  doc.setFontSize(Math.max(9, Math.min(depBase, depBase * depScale)))
-  doc.text(String(department), centerX, y + 44, { align: 'center' })
-  const addrBase = 10
-  doc.setFontSize(addrBase)
-  const addrW = doc.getTextWidth(String(address))
-  const addrScale = Math.min(1, allowedW / Math.max(1, addrW))
-  doc.setFontSize(Math.max(8, Math.min(addrBase, addrBase * addrScale)))
-  doc.text(String(address), centerX, y + 60, { align: 'center' })
+  doc.setFontSize(18)
+  doc.text(String(labName).toUpperCase(), leftX, y + 28)
+  doc.setFontSize(11)
+  doc.text(String(department), leftX, y + 44)
+  doc.setFontSize(10)
+  doc.text(String(address), leftX, y + 60)
   const contact = `Ph: ${phone || ''}${email? ' • '+email : ''}`
-  const cBase = 9
-  doc.setFontSize(cBase)
-  const cW = doc.getTextWidth(contact)
-  const cScale = Math.min(1, allowedW / Math.max(1, cW))
-  doc.setFontSize(Math.max(8, Math.min(cBase, cBase * cScale)))
-  doc.text(contact, centerX, y + 74, { align: 'center' })
+  doc.setFontSize(9)
+  doc.text(contact, leftX, y + 74)
 
-  try {
-    const qr = await makeQrPng(String(input.tokenNo || ''), 256)
-    if (qr){
-      doc.setFillColor(255,255,255); doc.roundedRect(qrX - 4, qrY - 4, qrSize + 8, qrSize + 8, 6, 6, 'F')
-      doc.addImage(qr, 'PNG' as any, qrX, qrY, qrSize, qrSize, undefined, 'FAST')
-    }
-  } catch {}
-  const drawChip = (label: string, value: string, xx: number) => {
-    const { w, labelW, pad } = measureChip(label, value)
-    doc.setDrawColor(255,255,255); doc.setLineWidth(0.8)
-    doc.setFillColor(255,255,255)
-    doc.roundedRect(xx, chipY, w, chipH, 8, 8, 'FD')
-    const prev = doc.getFontSize(); doc.setFontSize(9)
-    doc.setTextColor(14,116,144)
-    doc.text(label, xx + pad, chipY + 12)
-    doc.setFont('helvetica','bold')
-    doc.setTextColor(15)
-    doc.text(value, xx + pad + labelW, chipY + 12)
-    doc.setFont('helvetica','normal'); doc.setFontSize(prev)
-    return w
+  if ((input.barcode || '').trim()) {
+    try {
+      const b = String(input.barcode || '').trim()
+      const png = await makeBarcodeDataUrl(b)
+      if (png) {
+        const bw = 190
+        const bh = 26
+        const bx = cardX + cardW - bw - 24
+        const by = y + 38
+        doc.setFillColor(255,255,255)
+        doc.roundedRect(bx - 4, by - 4, bw + 8, bh + 22, 6, 6, 'F')
+        doc.addImage(png, 'PNG' as any, bx, by, bw, bh, undefined, 'FAST')
+        doc.setFont('helvetica','bold')
+        doc.setFontSize(8)
+        doc.setTextColor(15)
+        doc.text(b, bx + bw / 2, by + bh + 14, { align: 'center' })
+      }
+    } catch {}
   }
-  drawChip('Lab No: ', labVal, xLab)
 
   // Optional profile/test pill on the top-right
   if ((input.profileLabel||'').trim()){
@@ -263,12 +240,13 @@ export async function previewLabReportPdfGradient(input: LabReportInput){
     doc.setFont('helvetica','normal'); doc.text(value, x + w, yy)
   }
   drawKV('Patient Name :', String(input.patient.fullName), L, y)
-  drawKV('M.R. No :', String(input.patient.mrn || '-'), R, y); y += 14
+  drawKV('Lab No :', String(input.tokenNo || '-'), R, y); y += 14
   drawKV('Reg. & Sample Time :', String(fmtDateTime(input.createdAt)), L, y)
-  drawKV('Reporting Time :', String(fmtDateTime(input.reportingTime || '-')), R, y); y += 14
+  drawKV('M.R. No :', String(input.patient.mrn || '-'), R, y); y += 14
   drawKV('Contact No :', String(input.patient.phone || '-'), L, y)
-  drawKV('Referring Consultant :', String(input.referringConsultant || '-'), R, y); y += 14
+  drawKV('Reporting Time :', String(fmtDateTime(input.reportingTime || '-')), R, y); y += 14
   drawKV('Address :', String(input.patient.address || '-'), L, y); y += 8
+  drawKV('Referring Consultant :', String(input.referringConsultant || '-'), R, y - 8)
 
   // Results table
   const { head, body, idxPrev, idxFlag } = pickColumns(input.rows)
@@ -286,11 +264,17 @@ export async function previewLabReportPdfGradient(input: LabReportInput){
   })
 
   if ((input.interpretation||'').trim()){
+    const bullets = String(input.interpretation || '')
+      .split(/\r?\n/)
+      .map(s => s.trim())
+      .filter(Boolean)
+      .map(s => `• ${s}`)
+      .join('\n')
     autoTable(doc, {
       startY: (((doc as any).lastAutoTable?.finalY) || (y + 12)) + 12,
       body: [
         [{ content: 'Clinical Interpretation:', styles: { fontStyle: 'bold' } }],
-        [{ content: String(input.interpretation || '') }],
+        [{ content: bullets || String(input.interpretation || '') }],
       ],
       theme: 'plain',
       styles: { fontSize: 10, cellPadding: 0, halign: 'left' },
@@ -359,83 +343,41 @@ export async function downloadLabReportPdfGradient(input: LabReportInput){
   }catch{
     doc.setFillColor(14,165,233); doc.rect(cardX, y, cardW, gradH, 'F')
   }
-  if (logo){ try { const normalized = await ensurePngDataUrl(logo); doc.addImage(normalized, 'PNG' as any, cardX + 10, y + 10, 64, 64, undefined, 'FAST') } catch {} }
+  doc.setDrawColor(203,213,225); doc.setLineWidth(0.8); doc.roundedRect(cardX, y, cardW, gradH, 14, 14, 'S')
+  doc.setFillColor(255,255,255); doc.roundedRect(cardX + 10, y + 10, 64, 64, 8, 8, 'F')
+  if (logo){ try { const normalized = await ensurePngDataUrl(logo); doc.addImage(normalized, 'PNG' as any, cardX + 14, y + 14, 56, 56, undefined, 'FAST') } catch {} }
+  const leftX2 = cardX + 10 + 64 + 16
   doc.setTextColor(255,255,255)
-  const chipY = y + 20
-  const chipH = 18
-  const prevSizeB = doc.getFontSize(); doc.setFontSize(9)
-  const measureChip2 = (label: string, value: string) => {
-    const labelW = doc.getTextWidth(label + ' ')
-    const valW = doc.getTextWidth(value)
-    const pad = 8
-    return { w: labelW + valW + pad*2, labelW, pad }
-  }
-  const labVal2 = String(input.tokenNo || '-')
-  const qrX2 = cardX + cardW - 62
-  const qrY2 = y + 34
-  const qrSize2 = 48
-  const limitX2 = qrX2 - 8
-  const labW2 = measureChip2('Lab No: ', labVal2).w
-  const xLab2 = Math.max(cardX + cardW - 260, limitX2 - labW2)
-  doc.setFontSize(prevSizeB)
-
-  const leftBound2 = cardX + 10 + 64 + 16
-  const rightBound2 = xLab2 - 6
-  const centerX2 = (leftBound2 + rightBound2) / 2
-  const baseTitleSize2 = 18
-  doc.setFontSize(baseTitleSize2)
-  const upper2 = String(labName).toUpperCase()
-  const titleW2 = doc.getTextWidth(upper2)
-  const allowLeft2 = Math.max(1, centerX2 - leftBound2)
-  const allowRight2 = Math.max(1, rightBound2 - centerX2)
-  const allowedHalf2 = Math.min(allowLeft2, allowRight2)
-  const allowedW2 = Math.max(1, allowedHalf2 * 2)
-  const scale2 = Math.min(1, allowedW2 / Math.max(1, titleW2))
-  const finalTitleSize2 = Math.max(12, Math.min(18, baseTitleSize2 * scale2))
   doc.setFont('helvetica','bold')
-  doc.setFontSize(finalTitleSize2); doc.text(upper2, centerX2, y + 28, { align: 'center' })
-  const depBase2 = 11
-  doc.setFontSize(depBase2)
-  const depW2 = doc.getTextWidth(String(department))
-  const depScale2 = Math.min(1, allowedW2 / Math.max(1, depW2))
-  doc.setFontSize(Math.max(9, Math.min(depBase2, depBase2 * depScale2)))
-  doc.text(String(department), centerX2, y + 44, { align: 'center' })
-  const addrBase2 = 10
-  doc.setFontSize(addrBase2)
-  const addrW2 = doc.getTextWidth(String(address))
-  const addrScale2 = Math.min(1, allowedW2 / Math.max(1, addrW2))
-  doc.setFontSize(Math.max(8, Math.min(addrBase2, addrBase2 * addrScale2)))
-  doc.text(String(address), centerX2, y + 60, { align: 'center' })
+  doc.setFontSize(18)
+  doc.text(String(labName).toUpperCase(), leftX2, y + 28)
+  doc.setFontSize(11)
+  doc.text(String(department), leftX2, y + 44)
+  doc.setFontSize(10)
+  doc.text(String(address), leftX2, y + 60)
   const contact2 = `Ph: ${phone || ''}${email? ' • '+email : ''}`
-  const cBase2 = 9
-  doc.setFontSize(cBase2)
-  const cW2 = doc.getTextWidth(contact2)
-  const cScale2 = Math.min(1, allowedW2 / Math.max(1, cW2))
-  doc.setFontSize(Math.max(8, Math.min(cBase2, cBase2 * cScale2)))
-  doc.text(contact2, centerX2, y + 74, { align: 'center' })
+  doc.setFontSize(9)
+  doc.text(contact2, leftX2, y + 74)
 
-  try {
-    const qr2 = await makeQrPng(String(input.tokenNo || ''), 256)
-    if (qr2){
-      doc.setFillColor(255,255,255); doc.roundedRect(qrX2 - 4, qrY2 - 4, qrSize2 + 8, qrSize2 + 8, 6, 6, 'F')
-      doc.addImage(qr2, 'PNG' as any, qrX2, qrY2, qrSize2, qrSize2, undefined, 'FAST')
-    }
-  } catch {}
-  const drawChip2 = (label: string, value: string, xx: number) => {
-    const { w, labelW, pad } = measureChip2(label, value)
-    doc.setDrawColor(255,255,255); doc.setLineWidth(0.8)
-    doc.setFillColor(255,255,255)
-    doc.roundedRect(xx, chipY, w, chipH, 8, 8, 'FD')
-    const prev = doc.getFontSize(); doc.setFontSize(9)
-    doc.setTextColor(14,116,144)
-    doc.text(label, xx + pad, chipY + 12)
-    doc.setFont('helvetica','bold')
-    doc.setTextColor(15)
-    doc.text(value, xx + pad + labelW, chipY + 12)
-    doc.setFont('helvetica','normal'); doc.setFontSize(prev)
-    return w
+  if ((input.barcode || '').trim()) {
+    try {
+      const b = String(input.barcode || '').trim()
+      const png = await makeBarcodeDataUrl(b)
+      if (png) {
+        const bw = 190
+        const bh = 26
+        const bx = cardX + cardW - bw - 24
+        const by = y + 38
+        doc.setFillColor(255,255,255)
+        doc.roundedRect(bx - 4, by - 4, bw + 8, bh + 22, 6, 6, 'F')
+        doc.addImage(png, 'PNG' as any, bx, by, bw, bh, undefined, 'FAST')
+        doc.setFont('helvetica','bold')
+        doc.setFontSize(8)
+        doc.setTextColor(15)
+        doc.text(b, bx + bw / 2, by + bh + 14, { align: 'center' })
+      }
+    } catch {}
   }
-  drawChip2('Lab No: ', labVal2, xLab2)
 
   y += gradH + 12
   doc.setDrawColor(226,232,240)
@@ -450,12 +392,13 @@ export async function downloadLabReportPdfGradient(input: LabReportInput){
     doc.setFont('helvetica','normal'); doc.text(value, x + w, yy)
   }
   drawKV('Patient Name :', String(input.patient.fullName), L, y)
-  drawKV('M.R. No :', String(input.patient.mrn || '-'), R, y); y += 14
+  drawKV('Lab No :', String(input.tokenNo || '-'), R, y); y += 14
   drawKV('Reg. & Sample Time :', String(fmtDateTime(input.createdAt)), L, y)
-  drawKV('Reporting Time :', String(fmtDateTime(input.reportingTime || '-')), R, y); y += 14
+  drawKV('M.R. No :', String(input.patient.mrn || '-'), R, y); y += 14
   drawKV('Contact No :', String(input.patient.phone || '-'), L, y)
-  drawKV('Referring Consultant :', String(input.referringConsultant || '-'), R, y); y += 14
+  drawKV('Reporting Time :', String(fmtDateTime(input.reportingTime || '-')), R, y); y += 14
   drawKV('Address :', String(input.patient.address || '-'), L, y); y += 8
+  drawKV('Referring Consultant :', String(input.referringConsultant || '-'), R, y - 8)
 
   const { head, body, idxPrev, idxFlag } = pickColumns(input.rows)
   autoTable(doc, {
@@ -471,11 +414,17 @@ export async function downloadLabReportPdfGradient(input: LabReportInput){
     margin: { bottom: 120 },
   })
   if ((input.interpretation||'').trim()){
+    const bullets2 = String(input.interpretation || '')
+      .split(/\r?\n/)
+      .map(s => s.trim())
+      .filter(Boolean)
+      .map(s => `• ${s}`)
+      .join('\n')
     autoTable(doc, {
       startY: (((doc as any).lastAutoTable?.finalY) || (y + 12)) + 12,
       body: [
         [{ content: 'Clinical Interpretation:', styles: { fontStyle: 'bold' } }],
-        [{ content: String(input.interpretation || '') }],
+        [{ content: bullets2 || String(input.interpretation || '') }],
       ],
       theme: 'plain',
       styles: { fontSize: 10, cellPadding: 0, halign: 'left' },

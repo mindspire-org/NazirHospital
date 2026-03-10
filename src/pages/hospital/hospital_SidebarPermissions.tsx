@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { hospitalApi } from '../../utils/api'
 import { hospitalSidebarNav } from '../../components/hospital/hospital_Sidebar'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 type Permission = {
   path: string
@@ -27,6 +28,8 @@ export default function Hospital_SidebarPermissions() {
   const [newRoleName, setNewRoleName] = useState('')
   const [creatingRole, setCreatingRole] = useState(false)
   const [allowedPages, setAllowedPages] = useState<string[] | null>(null)
+  const [confirmDeleteRole, setConfirmDeleteRole] = useState<string | null>(null)
+  const [confirmResetRole, setConfirmResetRole] = useState<string | null>(null)
 
   const allowedPaths = (() => {
     if (!allowedPages) return null
@@ -162,7 +165,12 @@ export default function Hospital_SidebarPermissions() {
   }
 
   const deleteRole = async (role: string) => {
-    if (!confirm(`Delete role "${role}"? Users assigned to this role should be updated first.`)) return
+    setConfirmDeleteRole(role)
+  }
+  const confirmDeleteRoleAction = async () => {
+    const role = confirmDeleteRole
+    setConfirmDeleteRole(null)
+    if (!role) return
     try {
       await hospitalApi.deleteSidebarRole(role)
       showToast('success', `Role deleted: ${role}`)
@@ -226,11 +234,15 @@ export default function Hospital_SidebarPermissions() {
   }
 
   const resetToDefaults = async () => {
-    if (!confirm(`Are you sure you want to reset ${selectedRole} permissions to defaults?`)) return
-
+    setConfirmResetRole(selectedRole)
+  }
+  const confirmResetAction = async () => {
+    const role = confirmResetRole
+    setConfirmResetRole(null)
+    if (!role) return
     setSaving(true)
     try {
-      await hospitalApi.resetSidebarPermissions(selectedRole)
+      await hospitalApi.resetSidebarPermissions(role)
       await loadPermissions()
       showToast('success', 'Permissions reset to defaults')
     } catch (error) {
@@ -435,6 +447,22 @@ export default function Hospital_SidebarPermissions() {
           </div>
         )}
       </div>
+      <ConfirmDialog
+        open={!!confirmDeleteRole}
+        title="Delete Role"
+        message={`Delete role "${confirmDeleteRole}"? Users assigned to this role should be updated first.`}
+        confirmText="Delete"
+        onCancel={()=>setConfirmDeleteRole(null)}
+        onConfirm={confirmDeleteRoleAction}
+      />
+      <ConfirmDialog
+        open={!!confirmResetRole}
+        title="Reset Permissions"
+        message={`Are you sure you want to reset ${confirmResetRole} permissions to defaults?`}
+        confirmText="Reset"
+        onCancel={()=>setConfirmResetRole(null)}
+        onConfirm={confirmResetAction}
+      />
     </div>
   )
 }

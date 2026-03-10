@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { financeApi } from '../../utils/api'
+import Toast, { type ToastState } from '../../components/ui/Toast'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 export default function Finance_Vendors(){
   type Vendor = { id: string; name: string; phone?: string; address?: string }
@@ -16,6 +18,8 @@ export default function Finance_Vendors(){
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState<Vendor | null>(null)
   const [openAdd, setOpenAdd] = useState(false)
+  const [toast, setToast] = useState<ToastState>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string>('')
 
   useEffect(()=>{ load() }, [page, limit, q])
 
@@ -40,7 +44,7 @@ export default function Finance_Vendors(){
       await load()
     } catch (err: any) {
       const msg = err?.message || 'Failed to add vendor'
-      alert(msg)
+      setToast({ type: 'error', message: msg })
     } finally { setLoading(false) }
   }
 
@@ -55,11 +59,19 @@ export default function Finance_Vendors(){
   }
 
   async function remove(id: string){
-    if (!confirm('Delete this vendor?')) return
-    try { await financeApi.deleteVendor(id); await load() } catch {}
+    setConfirmDeleteId(String(id))
+  }
+
+  async function confirmDelete(){
+    const id = confirmDeleteId
+    setConfirmDeleteId('')
+    if (!id) return
+    try { await financeApi.deleteVendor(id); await load(); setToast({ type: 'success', message: 'Deleted' }) }
+    catch (e: any){ setToast({ type: 'error', message: e?.message || 'Failed to delete vendor' }) }
   }
 
   return (
+    <>
     <div className="w-full px-4 md:px-6 py-6 space-y-6">
       <div className="text-2xl font-bold text-slate-800">Vendors</div>
 
@@ -153,5 +165,15 @@ export default function Finance_Vendors(){
         </div>
       </div>
     </div>
+    <ConfirmDialog
+      open={!!confirmDeleteId}
+      title="Confirm"
+      message="Delete this vendor?"
+      confirmText="Delete"
+      onCancel={()=>setConfirmDeleteId('')}
+      onConfirm={confirmDelete}
+    />
+    <Toast toast={toast} onClose={()=>setToast(null)} />
+    </>
   )
 }

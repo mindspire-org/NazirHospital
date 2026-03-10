@@ -28,6 +28,15 @@ export default function Lab_SidebarPermissions() {
   const [creatingRole, setCreatingRole] = useState(false)
   const [allowedPages, setAllowedPages] = useState<string[] | null>(null)
 
+  const navItems = (() => {
+    const out: any[] = []
+    for (const x of (labSidebarNav as any[])) {
+      if (x && x.type === 'group' && Array.isArray((x as any).items)) out.push(...(x as any).items)
+      else out.push(x)
+    }
+    return out
+  })()
+
   const allowedPaths = (() => {
     if (!allowedPages) return null
     const allowedLabels = new Set(
@@ -36,8 +45,8 @@ export default function Lab_SidebarPermissions() {
         .filter(Boolean)
     )
     const set = new Set<string>()
-    for (const item of labSidebarNav) {
-      if (allowedLabels.has(item.label)) set.add(item.to)
+    for (const item of navItems) {
+      if (item?.label && allowedLabels.has(item.label)) set.add(item.to)
     }
     return set
   })()
@@ -82,7 +91,7 @@ export default function Lab_SidebarPermissions() {
     const existing = new Map(perms.map(p => [p.path, p]))
     let nextOrder = (perms || []).reduce((m, p) => Math.max(m, Number(p.order || 0)), 0)
 
-    const allowedNav = allowedPaths ? labSidebarNav.filter(i => allowedPaths.has(i.to)) : labSidebarNav
+    const allowedNav = allowedPaths ? navItems.filter(i => allowedPaths.has(i.to)) : navItems
 
     const merged: Permission[] = allowedNav.map((item, idx) => {
       const cur = existing.get(item.to)
@@ -211,11 +220,19 @@ export default function Lab_SidebarPermissions() {
 
     setSaving(true)
     try {
-      await labApi.updateSidebarPermissions(selectedRole, {
-        permissions: (allowedPaths
-          ? currentPermissions.permissions.filter(p => allowedPaths.has(p.path))
-          : currentPermissions.permissions)
-      })
+      const base = (allowedPaths
+        ? currentPermissions.permissions.filter(p => allowedPaths.has(p.path))
+        : currentPermissions.permissions)
+      const safePermissions = (base || [])
+        .filter(p => p && typeof p.path === 'string' && p.path.trim() && typeof p.label === 'string' && p.label.trim())
+        .map((p, idx) => ({
+          path: String(p.path),
+          label: String(p.label),
+          visible: Boolean(p.visible),
+          order: Number.isFinite(Number(p.order)) ? Number(p.order) : (idx + 1),
+        }))
+
+      await labApi.updateSidebarPermissions(selectedRole, { permissions: safePermissions })
       await loadPermissions()
       showToast('success', 'Permissions updated successfully')
     } catch (error) {

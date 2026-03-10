@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { aestheticApi, labApi } from '../../utils/api'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 function todayIso(){ return new Date().toISOString().slice(0,10) }
 
@@ -34,6 +35,7 @@ export default function Aesthetic_Appointments(){
 
   const [editOpen, setEditOpen] = useState(false)
   const [editRow, setEditRow] = useState<any | null>(null)
+  const [confirmDeleteAppt, setConfirmDeleteAppt] = useState<any | null>(null)
   const [editForm, setEditForm] = useState({
     doctorId: '',
     scheduleId: '',
@@ -307,8 +309,12 @@ export default function Aesthetic_Appointments(){
   async function removeAppointment(appt: any){
     if (!appt) return
     if (appt.tokenId){ setError('Converted appointment cannot be deleted'); return }
-    const ok = window.confirm('Delete this appointment?')
-    if (!ok) return
+    setConfirmDeleteAppt(appt)
+  }
+  async function doConfirmDeleteAppt(){
+    const appt = confirmDeleteAppt
+    setConfirmDeleteAppt(null)
+    if (!appt) return
     setError(null); setInfo(null)
     try{
       await (aestheticApi as any).deleteAppointment(String(appt._id))
@@ -619,6 +625,15 @@ export default function Aesthetic_Appointments(){
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmDeleteAppt}
+        title="Confirm Delete"
+        message="Delete this appointment?"
+        confirmText="Delete"
+        onCancel={()=>setConfirmDeleteAppt(null)}
+        onConfirm={doConfirmDeleteAppt}
+      />
 
     </div>
   )

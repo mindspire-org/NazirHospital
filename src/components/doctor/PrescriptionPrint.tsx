@@ -6,7 +6,7 @@ type Props = {
   items: Array<{ name: string; frequency?: string; duration?: string; dose?: string; instruction?: string; route?: string }>
   labTests?: string[]
   labNotes?: string
-  diagnosticTests?: string[]
+  diagnosticTests?: any[]
   diagnosticNotes?: string
   primaryComplaint?: string
   primaryComplaintHistory?: string
@@ -146,18 +146,6 @@ export default function PrescriptionPrint({ printId = 'prescription-print', doct
               <div>
                 <div className="text-xs font-semibold text-slate-700">Lab Notes</div>
                 <div className="min-h-[32px] whitespace-pre-wrap rounded-md border border-slate-300 p-2 text-sm">{labNotes}</div>
-              </div>
-            )}
-            {Array.isArray(diagnosticTests) && diagnosticTests.length > 0 && (
-              <div>
-                <div className="text-xs font-semibold text-slate-700">Diagnostic Tests</div>
-                <div className="min-h-[32px] whitespace-pre-wrap rounded-md border border-slate-300 p-2 text-sm">{diagnosticTests.join(', ')}</div>
-              </div>
-            )}
-            {diagnosticNotes && diagnosticNotes.trim() && (
-              <div>
-                <div className="text-xs font-semibold text-slate-700">Diagnostic Notes</div>
-                <div className="min-h-[32px] whitespace-pre-wrap rounded-md border border-slate-300 p-2 text-sm">{diagnosticNotes}</div>
               </div>
             )}
           </div>

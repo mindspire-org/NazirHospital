@@ -69,7 +69,7 @@ export async function buildInternationalCompact(data: PrescriptionPdfData){
   pdf.setTextColor(220, 50, 50)
   setPoppins('bold')
   pdf.setFontSize(12)
-  pdf.text('R/', 12, rxY + 6)
+  pdf.text('Rx', 12, rxY + 6)
 
   // Medicines list (compact format)
   const items = Array.isArray(data.items) ? data.items : []

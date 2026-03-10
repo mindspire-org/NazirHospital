@@ -649,7 +649,7 @@ export default function Pharmacy_POS() {
               {searchOpen && suggestions.length > 0 && (
                 <div className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
                   {suggestions.map((p, i) => (
-                    <button type="button" key={p.id} onMouseEnter={() => setSuggestionSel(i)} onClick={() => { addToCart(p.id, { focusQty: false }); setQuery(''); setSearchOpen(false); try { searchInputRef.current?.focus(); searchInputRef.current?.select() } catch {} }} className={`relative flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition ${i === suggestionSel ? 'bg-sky-100/80 text-slate-900 ring-1 ring-sky-200 dark:bg-sky-900/30 dark:text-slate-100' : 'hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
+                    <button type="button" key={p.id} onMouseEnter={() => setSuggestionSel(i)} onClick={() => { addToCart(p.id, { focusQty: false }); setQuery(''); setSearchOpen(false); try { searchInputRef.current?.focus(); searchInputRef.current?.select() } catch {} }} className={`relative flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition ${i === suggestionSel ? 'bg-sky-100/80 text-slate-900 ring-1 ring-sky-200' : 'hover:bg-slate-50'}`}>
                       {i === suggestionSel ? <span className="absolute left-0 top-0 h-full w-1 bg-sky-600" /> : null}
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-semibold text-slate-900">{p.name}</div>
@@ -779,13 +779,13 @@ export default function Pharmacy_POS() {
           onSetLineDiscountPct={(id, pct)=> setCart(prev=> prev.map(l=> l.id===id ? { ...l, discountPct: isNaN(pct)?0:Math.max(0, Math.min(100, pct)) } : l))}
         />
 
-        <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-800">
-          <div className="border-b border-slate-200 px-4 py-3 font-medium text-slate-800 dark:border-slate-600 dark:text-slate-100">Bill Summary</div>
-          <div className="space-y-2 p-4 text-sm text-slate-700 dark:text-slate-200">
+        <div className="rounded-xl border border-slate-200 bg-white">
+          <div className="border-b border-slate-200 px-4 py-3 font-medium text-slate-800">Bill Summary</div>
+          <div className="space-y-2 p-4 text-sm text-slate-700">
             <div className="flex items-center justify-between"><span>Subtotal:</span><span>PKR {totals.subtotal.toFixed(2)}</span></div>
             <div className="flex items-center justify-between"><span>Line Discounts:</span><span>PKR {totals.lineDiscount.toFixed(2)}</span></div>
             <div className="grid grid-cols-2 gap-2">
-              <label className="block text-xs text-slate-600 dark:text-slate-300">
+              <label className="block text-xs text-slate-600">
                 <span className="mb-1 block">Bill Discount (%)</span>
                 <input
                   type="number"
@@ -794,10 +794,10 @@ export default function Pharmacy_POS() {
                   step={0.01}
                   value={Number(billDiscountPct||0)}
                   onChange={e=> setBillDiscountPct(Math.max(0, Math.min(100, parseFloat(e.target.value)||0)))}
-                  className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900"
                 />
               </label>
-              <label className="block text-xs text-slate-600 dark:text-slate-300">
+              <label className="block text-xs text-slate-600">
                 <span className="mb-1 block">Bill Discount (Rs)</span>
                 <input
                   type="number"
@@ -810,12 +810,12 @@ export default function Pharmacy_POS() {
                     const pct = base>0 ? (rs / base) * 100 : 0
                     setBillDiscountPct(Math.max(0, Math.min(100, Number(pct.toFixed(6)))))
                   }}
-                  className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900  "
                 />
               </label>
             </div>
             <div className="flex items-center justify-between"><span>Sales Tax (0%):</span><span>PKR {totals.tax.toFixed(2)}</span></div>
-            <div className="mt-2 flex items-center justify-between text-base font-semibold text-navy dark:text-sky-300"><span>Total Amount:</span><span>PKR {totals.total.toFixed(2)}</span></div>
+            <div className="mt-2 flex items-center justify-between text-base font-semibold text-navy"><span>Total Amount:</span><span>PKR {totals.total.toFixed(2)}</span></div>
             <div className="mt-3 grid grid-cols-3 gap-2">
               <button type="button" onClick={holdBill} disabled={cart.length===0} className="rounded-md bg-navy px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Hold Bill</button>
               <button type="button" onClick={()=> setHeldOpen(true)} className="rounded-md bg-navy px-3 py-2 text-sm font-semibold text-white">Held Bills</button>

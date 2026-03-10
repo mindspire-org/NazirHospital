@@ -35,9 +35,11 @@ export const adminApi = {
 
 export const diagnosticApi = {
   // Tests (Catalog for Diagnostics)
-  listTests: (params?: { q?: string; page?: number; limit?: number }) => {
+  listTests: (params?: { q?: string; type?: 'test' | 'procedure'; status?: 'active' | 'inactive'; lite?: boolean; page?: number; limit?: number }) => {
     const qs = new URLSearchParams()
     if (params?.q) qs.set('q', params.q)
+    if (params?.type) qs.set('type', params.type)
+    if (params?.status) qs.set('status', params.status)
     if (params?.page != null) qs.set('page', String(params.page))
     if (params?.limit != null) qs.set('limit', String(params.limit))
     const s = qs.toString()
@@ -110,8 +112,10 @@ export const diagnosticApi = {
     const s = qs.toString()
     return api(`/diagnostic/orders${s ? `?${s}` : ''}`)
   },
-  createOrder: (data: { patientId: string; patient: { mrn?: string; fullName: string; phone?: string; age?: string; gender?: string; address?: string; guardianRelation?: string; guardianName?: string; cnic?: string }; tests: string[]; subtotal?: number; discount?: number; net?: number; referringConsultant?: string; tokenNo?: string; corporateId?: string; corporatePreAuthNo?: string; corporateCoPayPercent?: number; corporateCoverageCap?: number }) =>
+  createOrder: (data: { patientId: string; patient: { mrn?: string; fullName: string; phone?: string; age?: string; gender?: string; address?: string; guardianRelation?: string; guardianName?: string; cnic?: string }; tests: string[]; subtotal?: number; discount?: number; net?: number; receivedAmount?: number; paymentMethod?: string; referringConsultant?: string; tokenNo?: string; corporateId?: string; corporatePreAuthNo?: string; corporateCoPayPercent?: number; corporateCoverageCap?: number }) =>
     api('/diagnostic/orders', { method: 'POST', body: JSON.stringify(data) }),
+  receivePayment: (tokenNo: string, data: { amount: number; method?: string; note?: string }) =>
+    api(`/diagnostic/orders/${encodeURIComponent(tokenNo)}/receive-payment`, { method: 'POST', body: JSON.stringify(data) }),
   updateOrder: (id: string, data: { tests?: string[]; patient?: { mrn?: string; fullName?: string; phone?: string; age?: string; gender?: string; address?: string; guardianRelation?: string; guardianName?: string; cnic?: string }; subtotal?: number; discount?: number; net?: number }) =>
     api(`/diagnostic/orders/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   updateOrderTrack: (id: string, data: { sampleTime?: string; reportingTime?: string; status?: 'received' | 'completed' | 'returned'; referringConsultant?: string }) =>
@@ -122,6 +126,30 @@ export const diagnosticApi = {
   deleteOrderItem: (id: string, testId: string) =>
     api(`/diagnostic/orders/${id}/items/${encodeURIComponent(testId)}`, { method: 'DELETE' }),
   deleteOrder: (id: string) => api(`/diagnostic/orders/${id}`, { method: 'DELETE' }),
+  returnOrder: (id: string, data: { reason?: string; amount?: number }) =>
+    api(`/diagnostic/orders/${id}/return`, { method: 'POST', body: JSON.stringify(data) }),
+  undoReturn: (id: string) =>
+    api(`/diagnostic/orders/${id}/undo-return`, { method: 'POST' }),
+
+  // Income Ledger
+  incomeLedger: (params?: { from?: string; to?: string; tokenNo?: string; patientName?: string; page?: number; limit?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.from) qs.set('from', params.from)
+    if (params?.to) qs.set('to', params.to)
+    if (params?.tokenNo) qs.set('tokenNo', params.tokenNo)
+    if (params?.patientName) qs.set('patientName', params.patientName)
+    if (params?.page != null) qs.set('page', String(params.page))
+    if (params?.limit != null) qs.set('limit', String(params.limit))
+    const s = qs.toString()
+    return api(`/diagnostic/income-ledger${s ? `?${s}` : ''}`)
+  },
+  incomeLedgerSummary: (params?: { from?: string; to?: string }) => {
+    const qs = new URLSearchParams()
+    if (params?.from) qs.set('from', params.from)
+    if (params?.to) qs.set('to', params.to)
+    const s = qs.toString()
+    return api(`/diagnostic/income-ledger/summary${s ? `?${s}` : ''}`)
+  },
 
   // Settings
   getSettings: () => api('/diagnostic/settings'),
@@ -288,8 +316,10 @@ export const corporateApi = {
     return api(`/corporate/claims${s ? `?${s}` : ''}`)
   },
   getClaim: (id: string) => api(`/corporate/claims/${id}`),
-  generateClaim: (data: { companyId: string; fromDate?: string; toDate?: string; patientMrn?: string; departmentId?: string; serviceType?: 'OPD' | 'LAB' | 'DIAG' | 'IPD'; refType?: 'opd_token' | 'lab_order' | 'diag_order' | 'ipd_billing_item' }) =>
+  generateClaim: (data: { companyId: string; fromDate?: string; toDate?: string; patientMrn?: string; departmentId?: string; serviceType?: 'OPD' | 'LAB' | 'DIAG' | 'IPD'; refType?: 'opd_token' | 'lab_order' | 'diag_order' | 'ipd_billing_item'; transactionIds?: string[] }) =>
     api('/corporate/claims/generate', { method: 'POST', body: JSON.stringify(data) }),
+  updateClaim: (id: string, data: { status?: 'open' | 'locked' | 'exported' | 'partially-paid' | 'paid' | 'rejected'; notes?: string }) =>
+    api(`/corporate/claims/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   lockClaim: (id: string) => api(`/corporate/claims/${id}/lock`, { method: 'POST' }),
   unlockClaim: (id: string) => api(`/corporate/claims/${id}/unlock`, { method: 'POST' }),
   // Some backends expose different routes for deletion. Try multiple patterns.
@@ -325,6 +355,7 @@ export const corporateApi = {
   },
   getPayment: (id: string) => api(`/corporate/payments/${id}`),
   createPayment: (data: { companyId: string; dateIso: string; amount: number; refNo?: string; notes?: string; allocations?: Array<{ transactionId: string; amount: number }> }) => api('/corporate/payments', { method: 'POST', body: JSON.stringify(data) }),
+  createPaymentForClaim: (data: { companyId: string; claimId: string; dateIso: string; amount: number; discount?: number; refNo?: string; notes?: string }) => api('/corporate/payments/claim', { method: 'POST', body: JSON.stringify(data) }),
 }
 
 export async function api(path: string, init?: RequestInit) {
@@ -1523,15 +1554,35 @@ export const labApi = {
     if (params?.status) qs.set('status', params.status)
     if (params?.from) qs.set('from', params.from)
     if (params?.to) qs.set('to', params.to)
-    if (params?.page != null) qs.set('page', String(params.page))
-    if (params?.limit != null) qs.set('limit', String(params.limit))
+    if (params?.page) qs.set('page', String(params.page))
+    if (params?.limit) qs.set('limit', String(params.limit))
     const s = qs.toString()
     return api(`/lab/orders${s ? `?${s}` : ''}`)
   },
   createOrder: (data: any) => api('/lab/orders', { method: 'POST', body: JSON.stringify(data) }),
-  updateOrderTrack: (id: string, data: { sampleTime?: string; reportingTime?: string; status?: 'received' | 'completed'; referringConsultant?: string }) =>
+  receiveTokenPayment: (tokenNo: string, data: { amount: number; note?: string; method?: string }) =>
+    api(`/lab/orders/token/${encodeURIComponent(tokenNo)}/receive-payment`, { method: 'POST', body: JSON.stringify(data) }),
+  updateToken: (tokenNo: string, data: { tests: string[]; discount: number; receivedAmount: number }) =>
+    api(`/lab/orders/token/${encodeURIComponent(tokenNo)}`, { method: 'PUT', body: JSON.stringify(data) }),
+  updateOrderTrack: (id: string, data: { sampleTime?: string; reportingTime?: string; status?: 'received' | 'completed'; referringConsultant?: string; barcode?: string }) =>
     api(`/lab/orders/${id}/track`, { method: 'PUT', body: JSON.stringify(data) }),
+  assignBarcode: (id: string, barcode: string) =>
+    api(`/lab/orders/${id}/track`, { method: 'PUT', body: JSON.stringify({ barcode }) }),
   deleteOrder: (id: string) => api(`/lab/orders/${id}`, { method: 'DELETE' }),
+
+  // Income Ledger
+  incomeLedger: (params?: { from?: string; to?: string; status?: 'all'|'paid'|'receivable'; method?: string; q?: string; page?: number; limit?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.from) qs.set('from', params.from)
+    if (params?.to) qs.set('to', params.to)
+    if (params?.status) qs.set('status', params.status)
+    if (params?.method) qs.set('method', params.method)
+    if (params?.q) qs.set('q', params.q)
+    if (params?.page != null) qs.set('page', String(params.page))
+    if (params?.limit != null) qs.set('limit', String(params.limit))
+    const s = qs.toString()
+    return api(`/lab/income-ledger${s ? `?${s}` : ''}`)
+  },
 
   // Appointments (Lab)
   listAppointments: (params?: { date?: string; from?: string; to?: string; status?: 'booked' | 'confirmed' | 'cancelled' | 'converted'; q?: string; limit?: number }) => {
@@ -1566,7 +1617,7 @@ export const labApi = {
     return api(`/lab/results${s ? `?${s}` : ''}`)
   },
   getResult: (id: string) => api(`/lab/results/${id}`),
-  createResult: (data: any) => api('/lab/results', { method: 'POST', body: JSON.stringify(data) }),
+  createResult: (data: { orderId: string; rows?: any[]; interpretation?: string; submittedBy?: string } | any) => api('/lab/results', { method: 'POST', body: JSON.stringify(data) }),
   updateResult: (id: string, data: { rows?: any[]; interpretation?: string; reportStatus?: 'pending' | 'approved'; approvedAt?: string | Date; approvedBy?: string } | any) =>
     api(`/lab/results/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   // Dashboard
@@ -1630,9 +1681,31 @@ export const hospitalApi = {
   getSettings: () => api('/hospital/settings'),
   updateSettings: (data: any) => api('/hospital/settings', { method: 'PUT', body: JSON.stringify(data) }),
 
+  // Reports
+  myActivityReport: (params?: { mode?: 'today' | 'shift' }) => {
+    const qs = new URLSearchParams()
+    if (params?.mode) qs.set('mode', params.mode)
+    const s = qs.toString()
+    return api(`/hospital/reports/my-activity${s ? `?${s}` : ''}`)
+  },
+
   // FBR
   getFbrSettings: () => api('/hospital/fbr/settings'),
   updateFbrSettings: (data: any) => api('/hospital/fbr/settings', { method: 'PUT', body: JSON.stringify(data) }),
+ 
+  // Finance: Transactions
+  listTransactions: (params?: { from?: string; to?: string; type?: string; method?: string; q?: string; page?: number; limit?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.from) qs.set('from', params.from)
+    if (params?.to) qs.set('to', params.to)
+    if (params?.type && params.type !== 'All') qs.set('type', params.type)
+    if (params?.method && params.method !== 'all') qs.set('method', params.method)
+    if (params?.q) qs.set('q', params.q)
+    if (params?.page != null) qs.set('page', String(params.page))
+    if (params?.limit != null) qs.set('limit', String(params.limit))
+    const s = qs.toString()
+    return api(`/hospital/finance/transactions${s ? `?${s}` : ''}`)
+  },
   listFbrLogs: (params?: { q?: string; from?: string; to?: string; module?: string; status?: string; page?: number; limit?: number }) => {
     const qs = new URLSearchParams()
     if (params?.q) qs.set('q', String(params.q))
@@ -1653,6 +1726,15 @@ export const hospitalApi = {
     if (params?.to) qs.set('to', String(params.to))
     const s = qs.toString()
     return api(`/hospital/fbr/summary${s ? `?${s}` : ''}`)
+  },
+
+  // Corporate AR Breakdown
+  getCorporateARBreakdown: (params?: { from?: string; to?: string }) => {
+    const qs = new URLSearchParams()
+    if (params?.from) qs.set('from', params.from)
+    if (params?.to) qs.set('to', params.to)
+    const s = qs.toString()
+    return api(`/hospital/finance/corporate-ar-breakdown${s ? `?${s}` : ''}`)
   },
 
   // Store Management
@@ -1894,7 +1976,73 @@ export const hospitalApi = {
   },
   createErCharge: (encounterId: string, data: { type?: 'service'|'procedure'|'other'; description: string; qty?: number; unitPrice?: number; amount?: number; date?: string|Date; refId?: string; billedBy?: string }) =>
     api(`/hospital/er/encounters/${encodeURIComponent(encounterId)}/charges`, { method: 'POST', body: JSON.stringify(data) }),
+  updateErCharge: (id: string, data: { type?: 'service'|'procedure'|'other'; description?: string; qty?: number; unitPrice?: number; amount?: number; date?: string|Date; refId?: string; billedBy?: string }) =>
+    api(`/hospital/er/charges/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteErCharge: (id: string) => api(`/hospital/er/charges/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  // ER Billing - Payments
+  erBillingSummary: (encounterId: string) => api(`/hospital/er/encounters/${encodeURIComponent(encounterId)}/billing/summary`),
+  erListPayments: (encounterId: string, params?: { page?: number; limit?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.page != null) qs.set('page', String(params.page))
+    if (params?.limit != null) qs.set('limit', String(params.limit))
+    const s = qs.toString()
+    return api(`/hospital/er/encounters/${encodeURIComponent(encounterId)}/billing/payments${s ? `?${s}` : ''}`)
+  },
+  erCreatePayment: (encounterId: string, data: { amount: number; method?: string; refNo?: string; receivedBy?: string; receivedAt?: string|Date; notes?: string }) =>
+    api(`/hospital/er/encounters/${encodeURIComponent(encounterId)}/billing/payments`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // ER Services Catalog
+  listErServices: (params?: { q?: string; category?: string; active?: boolean; page?: number; limit?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.q) qs.set('q', params.q)
+    if (params?.category) qs.set('category', params.category)
+    if (params?.active != null) qs.set('active', String(params.active))
+    if (params?.page != null) qs.set('page', String(params.page))
+    if (params?.limit != null) qs.set('limit', String(params.limit))
+    const s = qs.toString()
+    return api(`/hospital/er/services${s ? `?${s}` : ''}`)
+  },
+  createErService: (data: { name: string; category?: string; price?: number; active?: boolean }) =>
+    api('/hospital/er/services', { method: 'POST', body: JSON.stringify(data) }),
+  updateErService: (id: string, data: { name?: string; category?: string; price?: number; active?: boolean }) =>
+    api(`/hospital/er/services/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteErService: (id: string) => api(`/hospital/er/services/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  // ER Records: Vitals
+  listErVitals: (encounterId: string, params?: { page?: number; limit?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.page != null) qs.set('page', String(params.page))
+    if (params?.limit != null) qs.set('limit', String(params.limit))
+    const s = qs.toString()
+    return api(`/hospital/er/encounters/${encounterId}/vitals${s ? `?${s}` : ''}`)
+  },
+  createErVital: (encounterId: string, data: { recordedAt?: string; bp?: string; hr?: number; rr?: number; temp?: number; spo2?: number; height?: number; weight?: number; painScale?: number; recordedBy?: string; note?: string; shift?: 'morning' | 'evening' | 'night'; bsr?: number; intakeIV?: string; urine?: string; nurseSign?: string }) =>
+    api(`/hospital/er/encounters/${encounterId}/vitals`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // ER Records: Medication Orders
+  listErMedOrders: (encounterId: string, params?: { page?: number; limit?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.page != null) qs.set('page', String(params.page))
+    if (params?.limit != null) qs.set('limit', String(params.limit))
+    const s = qs.toString()
+    return api(`/hospital/er/encounters/${encounterId}/med-orders${s ? `?${s}` : ''}`)
+  },
+  createErMedOrder: (encounterId: string, data: { drugId?: string; drugName?: string; dose?: string; route?: string; frequency?: string; duration?: string; startAt?: string; endAt?: string; prn?: boolean; status?: 'active' | 'stopped'; prescribedBy?: string }) =>
+    api(`/hospital/er/encounters/${encounterId}/med-orders`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // ER Records: Clinical Notes
+  listErClinicalNotes: (encounterId: string, params?: { type?: 'consultant' | 'nursing' | 'progress' | 'er-notes'; page?: number; limit?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.type) qs.set('type', params.type)
+    if (params?.page != null) qs.set('page', String(params.page))
+    if (params?.limit != null) qs.set('limit', String(params.limit))
+    const s = qs.toString()
+    return api(`/hospital/er/encounters/${encounterId}/clinical-notes${s ? `?${s}` : ''}`)
+  },
+  createErClinicalNote: (encounterId: string, data: { type: 'consultant' | 'nursing' | 'progress' | 'er-notes'; recordedAt?: string; createdBy?: string; createdByRole?: string; doctorName?: string; sign?: string; data?: any }) =>
+    api(`/hospital/er/encounters/${encounterId}/clinical-notes`, { method: 'POST', body: JSON.stringify(data) }),
+
   updateTokenStatus: (id: string, status: 'queued' | 'in-progress' | 'completed' | 'returned' | 'cancelled') =>
     api(`/hospital/tokens/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   updateToken: (id: string, data: { discount?: number; doctorId?: string; departmentId?: string; patientId?: string; mrn?: string; patientName?: string; phone?: string; gender?: string; guardianRel?: string; guardianName?: string; cnic?: string; address?: string; age?: string; overrideFee?: number }) =>
@@ -2189,7 +2337,7 @@ export const hospitalApi = {
     api(`/hospital/ipd/admissions/${encounterId}/notes`, { method: 'POST', body: JSON.stringify(data) }),
 
   // IPD Records: Clinical Notes (Unified)
-  listIpdClinicalNotes: (encounterId: string, params?: { type?: 'preop' | 'operation' | 'postop' | 'consultant' | 'anes-pre' | 'anes-intra' | 'anes-recovery' | 'anes-post-recovery' | 'anes-adverse'; page?: number; limit?: number }) => {
+  listIpdClinicalNotes: (encounterId: string, params?: { type?: 'preop' | 'operation' | 'postop' | 'consultant' | 'anes-pre' | 'anes-intra' | 'anes-recovery' | 'anes-post-recovery' | 'anes-adverse' | 'consent-form' | 'infection-control' | 'blood-transfusion' | 'operation-consent' | 'history-exam' | 'surgical-signin' | 'surgical-timeout' | 'surgical-signout'; page?: number; limit?: number }) => {
     const qs = new URLSearchParams()
     if (params?.type) qs.set('type', params.type)
     if (params?.page != null) qs.set('page', String(params.page))
@@ -2197,7 +2345,7 @@ export const hospitalApi = {
     const s = qs.toString()
     return api(`/hospital/ipd/admissions/${encounterId}/clinical-notes${s ? `?${s}` : ''}`)
   },
-  createIpdClinicalNote: (encounterId: string, data: { type: 'preop' | 'operation' | 'postop' | 'consultant' | 'anes-pre' | 'anes-intra' | 'anes-recovery' | 'anes-post-recovery' | 'anes-adverse'; recordedAt?: string; createdBy?: string; createdByRole?: string; doctorName?: string; sign?: string; data: any }) =>
+  createIpdClinicalNote: (encounterId: string, data: { type: 'preop' | 'operation' | 'postop' | 'consultant' | 'anes-pre' | 'anes-intra' | 'anes-recovery' | 'anes-post-recovery' | 'anes-adverse' | 'consent-form' | 'infection-control' | 'blood-transfusion' | 'operation-consent' | 'history-exam' | 'surgical-signin' | 'surgical-timeout' | 'surgical-signout'; recordedAt?: string; createdBy?: string; createdByRole?: string; doctorName?: string; sign?: string; data: any }) =>
     api(`/hospital/ipd/admissions/${encounterId}/clinical-notes`, { method: 'POST', body: JSON.stringify(data) }),
   updateIpdClinicalNote: (id: string, data: any) =>
     api(`/hospital/ipd/clinical-notes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -2453,6 +2601,14 @@ export const financeApi = {
     api('/hospital/finance/manual-doctor-earning', { method: 'POST', body: JSON.stringify(data) }),
   doctorPayout: (data: { doctorId: string; amount: number; method?: 'Cash' | 'Bank'; memo?: string }) =>
     api('/hospital/finance/doctor-payout', { method: 'POST', body: JSON.stringify(data) }),
+  listRecentDoctorPayouts: (params?: { page?: number; limit?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.page != null) qs.set('page', String(params.page))
+    if (params?.limit != null) qs.set('limit', String(params.limit))
+    qs.set('refType', 'doctor_payout')
+    const s = qs.toString()
+    return api(`/hospital/finance/transactions${s ? `?${s}` : ''}`)
+  },
   doctorBalance: (doctorId: string) =>
     api(`/hospital/finance/doctor/${encodeURIComponent(doctorId)}/balance`),
   doctorPayouts: (doctorId: string, limit?: number) =>

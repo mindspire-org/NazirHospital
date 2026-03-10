@@ -5,6 +5,8 @@ import { printUltrasoundReport } from '../diagnostic/diagnostic_UltrasoundGeneri
 import { printCTScanReport } from '../diagnostic/diagnostic_CTScan'
 import { printColonoscopyReport } from '../diagnostic/diagnostic_Colonoscopy'
 import { printUpperGIEndoscopyReport } from '../diagnostic/diagnostic_UpperGIEndoscopy'
+import Toast, { type ToastState } from '../ui/Toast'
+import ConfirmDialog from '../ui/ConfirmDialog'
 
 function resolveKey(name: string){
   const n = (name||'').toLowerCase()
@@ -23,6 +25,8 @@ export default function DiagnosticTests({ encounterId }: { encounterId: string }
   const [encDoctorId, setEncDoctorId] = useState<string>('')
   const [encPatient, setEncPatient] = useState<any | null>(null)
   const [testsList, setTestsList] = useState<string[]>([])
+  const [toast, setToast] = useState<ToastState>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string>('')
 
   useEffect(()=>{ if(encounterId){ reload() } }, [encounterId])
   useEffect(()=>{ (async()=>{ try { const res = await hospitalApi.getIPDAdmissionById(encounterId) as any; const enc = res?.encounter; setEncDoctorId(String(enc?.doctorId?._id || enc?.doctorId || '')); setEncPatient(enc?.patientId || null) } catch {} })() }, [encounterId])
@@ -56,17 +60,31 @@ export default function DiagnosticTests({ encounterId }: { encounterId: string }
       await hospitalApi.createReferral({ type: 'diagnostic', encounterId, doctorId: d.doctorId, tests: d.test ? [d.test] : undefined })
       setOpen(false)
       await reload()
-    }catch(e: any){ alert(e?.message || 'Failed to refer to Diagnostic') }
+      setToast({ type: 'success', message: 'Referred to Diagnostic' })
+    }catch(e: any){ setToast({ type: 'error', message: e?.message || 'Failed to refer to Diagnostic' }) }
   }
 
   async function removeReferral(id: string){
-    if (!confirm('Delete this diagnostic referral?')) return
-    try{ await hospitalApi.deleteReferral(String(id)); await reload() }catch(e: any){ alert(e?.message || 'Failed to delete') }
+    setConfirmDeleteId(String(id))
+  }
+
+  async function confirmDelete(){
+    const id = confirmDeleteId
+    setConfirmDeleteId('')
+    if (!id) return
+    try{
+      await hospitalApi.deleteReferral(String(id))
+      await reload()
+      setToast({ type: 'success', message: 'Deleted' })
+    }catch(e: any){
+      setToast({ type: 'error', message: e?.message || 'Failed to delete' })
+    }
   }
 
   const testOptions = useMemo(()=> Array.from(new Set(testsList)).sort(), [testsList])
 
   return (
+    <>
     <div className="rounded-xl border border-slate-200 bg-white p-4">
       <div className="mb-2 flex items-center justify-between">
         <div className="text-lg font-semibold text-slate-900">Diagnostic Tests</div>
@@ -116,6 +134,16 @@ export default function DiagnosticTests({ encounterId }: { encounterId: string }
       )}
       <OrderDialog open={open} onClose={()=>setOpen(false)} onSave={save} doctors={doctors} defaultDoctorId={encDoctorId} testOptions={testOptions} />
     </div>
+    <ConfirmDialog
+      open={!!confirmDeleteId}
+      title="Confirm"
+      message="Delete this diagnostic referral?"
+      confirmText="Delete"
+      onCancel={()=>setConfirmDeleteId('')}
+      onConfirm={confirmDelete}
+    />
+    <Toast toast={toast} onClose={()=>setToast(null)} />
+    </>
   )
 }
 
@@ -168,15 +196,15 @@ async function previewReferral(testName: string, patient?: any){
     const pick = arr
       .filter((x:any)=> resolveKey(String(x.testName||'')) === key)
       .sort((a:any,b:any)=> new Date(b.createdAt||0).getTime() - new Date(a.createdAt||0).getTime())[0] || null
-    if (!pick){ alert('No report found for this test yet.'); return }
+    if (!pick){ throw new Error('No report found for this test yet.') }
     const payload = { tokenNo: pick.tokenNo, createdAt: pick.createdAt, reportedAt: pick.reportedAt || pick.createdAt, patient: pick.patient, value: String(pick.formData||''), referringConsultant: (pick as any)?.patient?.referringConsultant }
     if (key === 'Echocardiography') { await printEchocardiographyReport(payload as any); return }
     if (key === 'Ultrasound') { await printUltrasoundReport(payload as any); return }
     if (key === 'CTScan') { await printCTScanReport(payload as any); return }
     if (key === 'Colonoscopy') { await printColonoscopyReport(payload as any); return }
     if (key === 'UpperGiEndoscopy') { await printUpperGIEndoscopyReport(payload as any); return }
-    alert('Preview not available for this test.')
+    throw new Error('Preview not available for this test.')
   }catch{
-    alert('Failed to open report preview.')
+    throw new Error('Failed to open report preview.')
   }
 }

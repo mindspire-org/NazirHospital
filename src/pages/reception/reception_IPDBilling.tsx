@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { hospitalApi } from '../../utils/api'
+import Toast, { type ToastState } from '../../components/ui/Toast'
+import { fmtDateTime12 } from '../../utils/timeFormat'
 
 function getReceptionUser(){
   try{
@@ -26,9 +28,10 @@ export default function Reception_IPDBilling(){
   const [payments, setPayments] = useState<any[]>([])
   const [method, setMethod] = useState('Cash')
   const [refNo, setRefNo] = useState('')
-  const [collecting, setCollecting] = useState(false)
   const [discount, setDiscount] = useState<string>('0')
+  const [collecting, setCollecting] = useState(false)
   const [collectAmount, setCollectAmount] = useState<string>('')
+  const [toast, setToast] = useState<ToastState>(null)
   const panelRef = useRef<HTMLDivElement|null>(null)
   const [flash, setFlash] = useState(false)
   const [showPanel, setShowPanel] = useState<boolean>(!!preEncounterId)
@@ -114,7 +117,7 @@ export default function Reception_IPDBilling(){
     const disc = Math.max(0, parseFloat(String(discount||'0')) || 0)
     const amt = Math.max(0, parseFloat(String(collectAmount||'0')) || 0)
     if ((disc + amt) <= 0) return
-    if ((disc + amt) > pending){ alert('Discount + Collect exceeds pending'); return }
+    if ((disc + amt) > pending){ setToast({ type: 'error', message: 'Discount + Collect exceeds pending' }); return }
     setCollecting(true)
     try{
       // Post discount first (as a payment with method 'Discount')
@@ -138,7 +141,8 @@ export default function Reception_IPDBilling(){
       setRefNo('')
       setDiscount('0')
       setCollectAmount('')
-    }catch(e: any){ alert(e?.message || 'Failed to record payment') }
+      setToast({ type: 'success', message: 'Payment recorded' })
+    }catch(e: any){ setToast({ type: 'error', message: e?.message || 'Failed to record payment' }) }
     setCollecting(false)
   }
 
@@ -152,7 +156,7 @@ export default function Reception_IPDBilling(){
     const dt = new Date()
     const linesHtml = charges.map((c:any)=>`<tr><td style="padding:4px 6px;border-bottom:1px solid #e5e7eb">${escapeHtml(c.description||'')}</td><td style="padding:4px 6px;text-align:right;border-bottom:1px solid #e5e7eb">${currency(Number(c.amount||0))}</td></tr>`).join('')
     const paysHtml = payments.concat(newPay? [{ amount: newPay.amount, method: newPay.method, refNo: newPay.refNo, receivedAt: dt.toISOString() }]: [])
-      .map((p:any)=>`<tr><td style="padding:3px 6px">${new Date(p.receivedAt||dt).toLocaleString()}</td><td style="padding:3px 6px">${escapeHtml(p.method||'-')}</td><td style="padding:3px 6px">${escapeHtml(p.refNo||'')}</td><td style="padding:3px 6px;text-align:right">${currency(Number(p.amount||0))}</td></tr>`).join('')
+      .map((p:any)=>`<tr><td style="padding:3px 6px">${fmtDateTime12(p.receivedAt||dt)}</td><td style="padding:3px 6px">${escapeHtml(p.method||'-')}</td><td style="padding:3px 6px">${escapeHtml(p.refNo||'')}</td><td style="padding:3px 6px;text-align:right">${currency(Number(p.amount||0))}</td></tr>`).join('')
     const html = `<!doctype html><html><head><meta charset="utf-8"/><title>IPD Bill Receipt</title>
       <style>
         @page { size: A5 portrait; margin: 10mm }
@@ -225,6 +229,7 @@ export default function Reception_IPDBilling(){
   function escapeHtml(x: any){ return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;') }
 
   return (
+    <>
     <div className="space-y-4">
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <div className="text-lg font-semibold">IPD Billing</div>
@@ -305,10 +310,10 @@ export default function Reception_IPDBilling(){
                 {payments.length===0 ? (<div className="text-sm text-slate-500">None</div>) : (
                   <div className="overflow-x-auto">
                     <table className="min-w-full text-sm">
-                      <thead className="bg-slate-50 text-slate-700"><tr><th className="px-2 py-1 text-left">Date/Time</th><th className="px-2 py-1 text-left">Method</th><th className="px-2 py-1 text-left">Ref</th><th className="px-2 py-1 text-right">Amount</th></tr></thead>
+                      <thead className="bg-slate-50 text-slate-700"><tr><th className="px-2 py-1 text-left">Date/Time</th><th className="px-2 py-1 text-left">Method</th><th className="px-2 py-1 text-left">Ref</th><th className="px-2 py-1 text-left">Performed By</th><th className="px-2 py-1 text-right">Amount</th></tr></thead>
                       <tbody className="divide-y">
                         {payments.map((p:any)=> (
-                          <tr key={String(p._id)}><td className="px-2 py-1">{new Date(p.receivedAt||p.createdAt||'').toLocaleString()}</td><td className="px-2 py-1">{p.method||'-'}</td><td className="px-2 py-1">{p.refNo||''}</td><td className="px-2 py-1 text-right">{currency(Number(p.amount||0))}</td></tr>
+                          <tr key={String(p._id)}><td className="px-2 py-1">{fmtDateTime12(p.receivedAt||p.createdAt||'')}</td><td className="px-2 py-1">{p.method||'-'}</td><td className="px-2 py-1">{p.refNo||''}</td><td className="px-2 py-1">{p.createdByUsername || p.createdBy || '-'}</td><td className="px-2 py-1 text-right">{currency(Number(p.amount||0))}</td></tr>
                         ))}
                       </tbody>
                     </table>
@@ -320,5 +325,7 @@ export default function Reception_IPDBilling(){
         </div>
       )}
     </div>
+    <Toast toast={toast} onClose={()=>setToast(null)} />
+    </>
   )
 }

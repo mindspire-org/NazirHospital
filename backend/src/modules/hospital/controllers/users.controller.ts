@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { HospitalUser } from '../models/User'
 import { HospitalAuditLog } from '../models/AuditLog'
 import bcrypt from 'bcryptjs'
+import { HospitalShift } from '../models/Shift'
 
 const createSchema = z.object({
   username: z.string().min(1),
@@ -14,6 +15,8 @@ const createSchema = z.object({
   email: z.string().optional(),
   password: z.string().optional(),
   active: z.boolean().optional(),
+  shiftId: z.string().optional(),
+  shiftRestricted: z.boolean().optional(),
 })
 
 const updateSchema = z.object({
@@ -24,6 +27,8 @@ const updateSchema = z.object({
   email: z.string().optional(),
   password: z.string().optional(),
   active: z.boolean().optional(),
+  shiftId: z.string().nullable().optional(),
+  shiftRestricted: z.boolean().optional(),
 })
 
 const loginSchema = z.object({
@@ -31,9 +36,30 @@ const loginSchema = z.object({
   password: z.string().optional(),
 })
 
+function toMin(hhmm: string){
+  const [h,m] = (hhmm||'').split(':').map(x=>parseInt(x,10)||0)
+  return h*60+m
+}
+
+function isNowWithinShift(shift: any, now: Date){
+  const hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
+  const cur = toMin(hhmm)
+  const start = toMin(String(shift?.start || '00:00'))
+  const end = toMin(String(shift?.end || '00:00'))
+
+  // Same-day shift
+  if (end > start) return cur >= start && cur < end
+
+  // Overnight shift (e.g. 20:00 -> 08:00)
+  if (end < start) return cur >= start || cur < end
+
+  // Edge case: start == end, treat as 24h access
+  return true
+}
+
 export async function list(req: Request, res: Response){
   const rows = await HospitalUser.find({}).sort({ createdAt: -1 }).lean()
-  const users = rows.map((u: any)=> ({ id: String(u._id), username: u.username, role: u.role, fullName: u.fullName||'', phone: u.phone||'', email: u.email||'', active: !!u.active }))
+  const users = rows.map((u: any)=> ({ id: String(u._id), username: u.username, role: u.role, fullName: u.fullName||'', phone: u.phone||'', email: u.email||'', active: !!u.active, shiftId: u.shiftId ? String(u.shiftId) : undefined, shiftRestricted: !!u.shiftRestricted }))
   res.json({ users })
 }
 
@@ -52,6 +78,8 @@ export async function create(req: Request, res: Response){
     active: data.active ?? true,
     passwordHash: hashed,
     phoneNormalized: data.phone ? data.phone.replace(/\D+/g,'') : undefined,
+    shiftId: data.shiftId || undefined,
+    shiftRestricted: data.shiftRestricted ?? false,
   })
   try {
     const actor = (req as any).user?.name || (req as any).user?.email || 'system'
@@ -65,7 +93,7 @@ export async function create(req: Request, res: Response){
       detail: `User ${doc.username} (${doc._id}) role ${doc.role}`,
     })
   } catch {}
-  res.status(201).json({ user: { id: String(doc._id), username: doc.username, role: doc.role, fullName: doc.fullName||'', phone: doc.phone||'', email: doc.email||'', active: !!doc.active } })
+  res.status(201).json({ user: { id: String(doc._id), username: doc.username, role: doc.role, fullName: doc.fullName||'', phone: doc.phone||'', email: doc.email||'', active: !!doc.active, shiftId: doc.shiftId ? String(doc.shiftId) : undefined, shiftRestricted: !!doc.shiftRestricted } })
 }
 
 export async function update(req: Request, res: Response){
@@ -79,6 +107,8 @@ export async function update(req: Request, res: Response){
   if (data.email != null) patch.email = data.email
   if (data.active != null) patch.active = data.active
   if (data.password) patch.passwordHash = await bcrypt.hash(String(data.password), 10)
+  if (data.shiftRestricted != null) patch.shiftRestricted = data.shiftRestricted
+  if (Object.prototype.hasOwnProperty.call(data, 'shiftId')) patch.shiftId = data.shiftId ? String(data.shiftId) : undefined
   const u: any = await HospitalUser.findByIdAndUpdate(id, patch, { new: true })
   if (!u) return res.status(404).json({ error: 'User not found' })
   try {
@@ -93,7 +123,7 @@ export async function update(req: Request, res: Response){
       detail: `User ${u.username} (${u._id}) updated`,
     })
   } catch {}
-  res.json({ user: { id: String(u._id), username: u.username, role: u.role, fullName: u.fullName||'', phone: u.phone||'', email: u.email||'', active: !!u.active } })
+  res.json({ user: { id: String(u._id), username: u.username, role: u.role, fullName: u.fullName||'', phone: u.phone||'', email: u.email||'', active: !!u.active, shiftId: u.shiftId ? String(u.shiftId) : undefined, shiftRestricted: !!u.shiftRestricted } })
 }
 
 export async function remove(req: Request, res: Response){
@@ -147,6 +177,19 @@ export async function login(req: Request, res: Response){
     }
   }
   if (!ok) return res.status(401).json({ error: 'Invalid credentials' })
+
+  // Optional shift restriction
+  try {
+    if (u.shiftRestricted) {
+      if (!u.shiftId) return res.status(403).json({ error: 'Shift not assigned' })
+      const shift: any = await HospitalShift.findById(String(u.shiftId)).lean()
+      if (!shift) return res.status(403).json({ error: 'Shift not found' })
+      const now = new Date()
+      if (!isNowWithinShift(shift, now)) {
+        return res.status(403).json({ error: `Login not allowed خارج shift timing (${shift.name}: ${shift.start}-${shift.end})` })
+      }
+    }
+  } catch {}
   try {
     const actor = u.fullName || u.username || 'system'
     await HospitalAuditLog.create({
@@ -160,7 +203,7 @@ export async function login(req: Request, res: Response){
     })
   } catch {}
   const token = jwt.sign({ sub: String(u._id), username: u.username, role: u.role, scope: 'hospital' }, env.JWT_SECRET, { expiresIn: '1d' })
-  res.json({ token, user: { id: String(u._id), username: u.username, role: u.role } })
+  res.json({ token, user: { id: String(u._id), username: u.username, role: u.role, shiftId: u.shiftId ? String(u.shiftId) : undefined, shiftRestricted: !!u.shiftRestricted } })
 }
 
 export async function logout(req: Request, res: Response){

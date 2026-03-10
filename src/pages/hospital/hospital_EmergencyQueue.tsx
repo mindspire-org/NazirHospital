@@ -50,9 +50,9 @@ export default function Hospital_EmergencyQueue(){
           if (!cancelled) setRows([])
           return
         }
-        const dateIso = new Date().toISOString().slice(0, 10)
-        const res: any = await hospitalApi.listTokens({ date: dateIso, departmentId: String(departmentId) })
-        const toks: any[] = res?.tokens || []
+        const res: any = await hospitalApi.listTokens({ departmentId: String(departmentId), status: 'queued' })
+        const res2: any = await hospitalApi.listTokens({ departmentId: String(departmentId), status: 'in-progress' })
+        const toks: any[] = [...(res?.tokens || []), ...(res2?.tokens || [])]
         const mapped: EmergencyRow[] = toks.map((t: any) => {
           const p = t.patientId || {}
           const docName = t.doctorId?.name || t.doctorId?.fullName || t.doctorId?.username || ''

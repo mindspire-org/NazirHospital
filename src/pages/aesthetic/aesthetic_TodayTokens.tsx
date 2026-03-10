@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { aestheticApi } from '../../utils/api'
 import Aesthetic_TokenSlip, { type TokenSlipData } from '../../components/aesthetic/aesthetic_TokenSlip'
+import Toast, { type ToastState } from '../../components/ui/Toast'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 interface TokenRow {
   _id: string
@@ -29,6 +31,8 @@ export default function Aesthetic_TodayTokens(){
   const [showSlip, setShowSlip] = useState(false)
   const [slipData, setSlipData] = useState<TokenSlipData | null>(null)
   const [actioningId, setActioningId] = useState<string | null>(null)
+  const [toast, setToast] = useState<ToastState>(null)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string>('')
 
   const [editOpen, setEditOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<TokenRow | null>(null)
@@ -127,7 +131,7 @@ export default function Aesthetic_TodayTokens(){
       setEditOpen(false)
       await load()
     } catch (e: any) {
-      alert(e?.message || 'Failed to update token')
+      setToast({ type: 'error', message: e?.message || 'Failed to update token' })
     } finally {
       setActioningId(null)
     }
@@ -139,26 +143,33 @@ export default function Aesthetic_TodayTokens(){
       await aestheticApi.updateTokenStatus(r._id, status)
       await load()
     } catch (e: any) {
-      alert(e?.message || 'Failed to update status')
+      setToast({ type: 'error', message: e?.message || 'Failed to update status' })
     } finally {
       setActioningId(null)
     }
   }
 
   async function doDelete(r: TokenRow){
-    if (!confirm('Delete this token?')) return
+    setConfirmDeleteId(String(r._id))
+  }
+
+  async function confirmDelete(){
+    const id = confirmDeleteId
+    setConfirmDeleteId('')
+    if (!id) return
     try {
-      setActioningId(r._id)
-      await aestheticApi.deleteToken(r._id)
+      setActioningId(id)
+      await aestheticApi.deleteToken(id)
       await load()
     } catch (e: any) {
-      alert(e?.message || 'Failed to delete token')
+      setToast({ type: 'error', message: e?.message || 'Failed to delete token' })
     } finally {
       setActioningId(null)
     }
   }
 
   return (
+    <>
     <div className="w-full">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100">Today's Tokens <span className="ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">{filtered.length}</span></h2>
@@ -258,6 +269,16 @@ export default function Aesthetic_TodayTokens(){
         </div>
       )}
     </div>
+    <ConfirmDialog
+      open={!!confirmDeleteId}
+      title="Confirm"
+      message="Delete this token?"
+      confirmText="Delete"
+      onCancel={()=>setConfirmDeleteId('')}
+      onConfirm={confirmDelete}
+    />
+    <Toast toast={toast} onClose={()=>setToast(null)} />
+    </>
   )
 }
 

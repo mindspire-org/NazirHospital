@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { hospitalApi } from '../../utils/api'
 import Hospital_AddExpenseDialog from '../../components/hospital/hospital_AddExpenseDialog'
+import Hospital_EditExpenseDialog from '../../components/hospital/hospital_EditExpenseDialog'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
@@ -30,6 +31,9 @@ export default function Finance_ExpenseHistory() {
   const [deptList, setDeptList] = useState<Array<{ id: string; name: string }>>([])
   const [all, setAll] = useState<ExpenseTxn[]>([])
   const [addOpen, setAddOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [editingExpense, setEditingExpense] = useState<ExpenseTxn | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [dept, setDept] = useState<'All' | string>('All')
@@ -58,7 +62,7 @@ export default function Finance_ExpenseHistory() {
           ref: r.ref ? String(r.ref) : undefined,
           module: 'Hospital',
           department: String(r.departmentName || '') || depMap[String(r.departmentId || '')] || String(r.departmentId || ''),
-          createdBy: r.createdBy ? String(r.createdBy) : undefined,
+          createdBy: r.createdByUsername ? String(r.createdByUsername) : (r.createdBy ? String(r.createdBy) : undefined),
         }))
         if (!cancelled) setAll(rows)
       } catch {
@@ -108,6 +112,21 @@ export default function Finance_ExpenseHistory() {
   }, [all, from, to, dept, cat, method, user, q])
 
   const total = useMemo(() => filtered.reduce((sum, r) => sum + (r.amount || 0), 0), [filtered])
+
+  const handleEdit = (expense: ExpenseTxn) => {
+    setEditingExpense(expense)
+    setEditOpen(true)
+  }
+
+  const handleDelete = async (id: string) => {
+    try {
+      await hospitalApi.deleteExpense(id)
+      setTick(t => t + 1)
+      setDeleteConfirm(null)
+    } catch (err: any) {
+      alert(err?.message || 'Failed to delete expense')
+    }
+  }
 
   const exportCsv = () => {
     const csv = toCsv(filtered)
@@ -268,6 +287,7 @@ export default function Finance_ExpenseHistory() {
                 <th className="px-4 py-2 font-medium">Method</th>
                 <th className="px-4 py-2 font-medium">Ref</th>
                 <th className="px-4 py-2 font-medium">Amount</th>
+                <th className="px-4 py-2 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 text-slate-700">
@@ -281,11 +301,17 @@ export default function Finance_ExpenseHistory() {
                   <td className="px-4 py-2">{r.method || '-'}</td>
                   <td className="px-4 py-2">{r.ref || '-'}</td>
                   <td className="px-4 py-2">Rs {r.amount.toFixed(2)}</td>
+                  <td className="px-4 py-2">
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => handleEdit(r)} className="text-blue-600 hover:text-blue-800 text-sm font-medium">Edit</button>
+                      <button onClick={() => setDeleteConfirm(r.id)} className="text-red-600 hover:text-red-800 text-sm font-medium">Delete</button>
+                    </div>
+                  </td>
                 </tr>
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-slate-500">No expenses</td>
+                  <td colSpan={9} className="px-4 py-12 text-center text-slate-500">No expenses</td>
                 </tr>
               )}
             </tbody>
@@ -297,6 +323,34 @@ export default function Finance_ExpenseHistory() {
         </div>
       </div>
       <Hospital_AddExpenseDialog open={addOpen} onClose={()=>setAddOpen(false)} onSaved={()=>setTick(t=>t+1)} />
+      
+      {/* Edit Dialog */}
+      {editOpen && editingExpense && (
+        <Hospital_EditExpenseDialog
+          expense={editingExpense}
+          open={editOpen}
+          onClose={() => { setEditOpen(false); setEditingExpense(null) }}
+          onSaved={() => { setTick(t => t + 1); setEditOpen(false); setEditingExpense(null) }}
+        />
+      )}
+
+      {/* Delete Confirmation */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md overflow-hidden rounded-xl bg-white shadow-2xl ring-1 ring-black/5">
+            <div className="border-b border-slate-200 px-5 py-3">
+              <div className="text-lg font-semibold text-slate-800">Confirm Delete</div>
+            </div>
+            <div className="px-5 py-4">
+              <p className="text-slate-700">Are you sure you want to delete this expense? This action cannot be undone.</p>
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-3">
+              <button onClick={() => setDeleteConfirm(null)} className="btn-outline-navy">Cancel</button>
+              <button onClick={() => handleDelete(deleteConfirm)} className="btn bg-red-600 hover:bg-red-700 text-white">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

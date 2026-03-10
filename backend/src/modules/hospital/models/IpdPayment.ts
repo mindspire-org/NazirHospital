@@ -9,6 +9,8 @@ const IpdPaymentSchema = new Schema({
   receivedBy: { type: String },
   receivedAt: { type: Date, default: Date.now, index: true },
   notes: { type: String },
+  createdByUserId: { type: String },
+  createdByUsername: { type: String },
   fbrInvoiceNo: { type: String },
   fbrQrCode: { type: String },
   fbrStatus: { type: String },
@@ -28,6 +30,8 @@ export type HospitalIpdPaymentDoc = {
   receivedBy?: string
   receivedAt: Date
   notes?: string
+  createdByUserId?: string
+  createdByUsername?: string
   fbrInvoiceNo?: string
   fbrQrCode?: string
   fbrStatus?: string

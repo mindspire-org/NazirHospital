@@ -73,7 +73,7 @@ export default function Hospital_StaffReportDialog({ open, onClose, staffList, i
       try {
         const from = `${month}-01`
         const dt = new Date(Number(month.slice(0,4)), Number(month.slice(5,7)), 0)
-        const to = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`
+        const to = `${dt.getFullYear()}-${String(month.slice(5,7)).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`
         const [attH, earnH] = await Promise.all([
           hospitalApi.listAttendance({ from, to, staffId: selected.id }),
           hospitalApi.listStaffEarnings({ from, to, staffId: selected.id, limit: 1000 }),
@@ -94,7 +94,7 @@ export default function Hospital_StaffReportDialog({ open, onClose, staffList, i
       try {
         const from = `${month}-01`
         const dt = new Date(Number(month.slice(0,4)), Number(month.slice(5,7)), 0)
-        const to = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`
+        const to = `${dt.getFullYear()}-${String(month.slice(5,7)).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`
         const res: any = await hospitalApi.listExpenses({ from, to })
         const list: any[] = Array.isArray(res?.expenses) ? res.expenses : []
         const sal = list.filter(x => String(x.category||'')==='Salaries' && String(x.note||x.description||'').includes(selected.name))
@@ -109,7 +109,7 @@ export default function Hospital_StaffReportDialog({ open, onClose, staffList, i
     if (!selected) return [] as Array<{ date: string; shift?: string; status: string; clockIn?: string; clockOut?: string; minutes: number }>
     const from = `${month}-01`
     const dt = new Date(Number(month.slice(0,4)), Number(month.slice(5,7)), 0)
-    const to = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`
+    const to = `${dt.getFullYear()}-${String(month.slice(5,7)).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`
     const recs = att.filter(a=> a.staffId===selected.id && a.date && a.date >= from && a.date <= to)
     const list = recs.map(r => {
       const ci = toMinutes(r.clockIn), co = toMinutes(r.clockOut)

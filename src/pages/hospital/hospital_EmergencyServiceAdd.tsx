@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import Toast, { type ToastState } from '../../components/ui/Toast'
+import { hospitalApi } from '../../utils/api'
 
 type Draft = {
   name: string
@@ -23,13 +25,23 @@ export default function Hospital_EmergencyServiceAdd(){
     price: 0,
     active: true,
   })
+  const [toast, setToast] = useState<ToastState>(null)
 
   const canSave = draft.name.trim().length > 0
 
-  const save = () => {
+  const save = async () => {
     if (!canSave) return
-    alert('Frontend scaffold: service will be saved after backend is ready. For now, this is UI only.')
-    navigate(returnTo)
+    try{
+      await hospitalApi.createErService({
+        name: draft.name.trim(),
+        category: draft.category?.trim() || undefined,
+        price: Number(draft.price || 0),
+        active: Boolean(draft.active),
+      })
+      navigate(returnTo)
+    }catch(e: any){
+      setToast({ type: 'error', message: e?.message || 'Failed to save service' })
+    }
   }
 
   return (
@@ -83,6 +95,7 @@ export default function Hospital_EmergencyServiceAdd(){
           </div>
         </div>
       </div>
+      <Toast toast={toast} onClose={()=>setToast(null)} />
     </div>
   )
 }

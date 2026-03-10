@@ -46,6 +46,12 @@ export async function list(req: Request, res: Response){
     if (q.doctorId) crit.doctorId = q.doctorId
     if (q.departmentId) crit.departmentId = q.departmentId
     if (q.date) crit.dateIso = q.date
+    // Support date range queries
+    if (q.from || q.to) {
+      crit.dateIso = crit.dateIso || {}
+      if (q.from) crit.dateIso.$gte = q.from
+      if (q.to) crit.dateIso.$lte = q.to
+    }
     const rows = await HospitalDoctorSchedule.find(crit).sort({ dateIso: 1, startTime: 1 }).lean()
     res.json({ schedules: rows })
   }catch{ res.status(500).json({ error: 'Internal Server Error' }) }

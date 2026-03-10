@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { financeApi } from '../../utils/api'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 
 export default function Finance_Recurring(){
   type Rec = { id: string; name: string; memo?: string; amount: number; accountDebit: string; accountCredit: string; vendorId?: string; frequency: 'daily'|'weekly'|'monthly'; startDate: string; endDate?: string; nextRun: string; active: boolean }
@@ -10,6 +11,7 @@ export default function Finance_Recurring(){
     { name: '', memo: '', amount: '', accountDebit: 'EXPENSE', accountCredit: 'CASH', vendorId: '', frequency: 'monthly', startDate: new Date().toISOString().slice(0,10) }
   )
   const [loading, setLoading] = useState(false)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
   useEffect(()=>{ load(); loadVendors() }, [])
 
@@ -45,7 +47,12 @@ export default function Finance_Recurring(){
   }
   async function toggleActive(r: Rec){ try { await financeApi.recurringUpdate(r.id, { active: !r.active }); await load() } catch {}
   }
-  async function remove(id: string){ if (!confirm('Delete this schedule?')) return; try { await financeApi.recurringDelete(id); await load() } catch {}
+  async function remove(id: string){ setConfirmDeleteId(id) }
+  async function doConfirmRemove(){
+    const id = confirmDeleteId
+    setConfirmDeleteId(null)
+    if (!id) return
+    try { await financeApi.recurringDelete(id); await load() } catch {}
   }
 
   return (
@@ -138,6 +145,14 @@ export default function Finance_Recurring(){
           </tbody>
         </table>
       </div>
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        title="Confirm Delete"
+        message="Delete this schedule?"
+        confirmText="Delete"
+        onCancel={()=>setConfirmDeleteId(null)}
+        onConfirm={doConfirmRemove}
+      />
     </div>
   )
 }

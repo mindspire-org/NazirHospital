@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import { hospitalApi } from '../../utils/api'
+import Toast, { type ToastState } from '../ui/Toast'
 
 export default function Billing({ encounterId }: { encounterId: string }){
   const [charges, setCharges] = useState<Array<{ id: string; label: string; amount: number }>>([])
   const [payments, setPayments] = useState<Array<{ id: string; amount: number }>>([])
   const [open, setOpen] = useState(false)
+  const [toast, setToast] = useState<ToastState>(null)
 
   useEffect(()=>{ if(encounterId){ reload() } }, [encounterId])
 
@@ -28,15 +30,16 @@ export default function Billing({ encounterId }: { encounterId: string }){
     try{
       await hospitalApi.createIpdBillingItem(encounterId, { type: 'service', description: d.label, qty: 1, unitPrice: d.amount, amount: d.amount })
       setOpen(false); await reload()
-    }catch(e: any){ alert(e?.message || 'Failed to add charge') }
+      setToast({ type: 'success', message: 'Charge added' })
+    }catch(e: any){ setToast({ type: 'error', message: e?.message || 'Failed to add charge' }) }
   }
 
   async function markPaid(amount: number){
     if (pending <= 0) return
     const amt = Number(amount || 0)
     if (amt <= 0) return
-    if (amt > pending){ alert('Cannot pay more than pending'); return }
-    try{ await hospitalApi.createIpdPayment(encounterId, { amount: amt }); await reload() }catch(e: any){ alert(e?.message || 'Failed to record payment') }
+    if (amt > pending){ setToast({ type: 'error', message: 'Cannot pay more than pending' }); return }
+    try{ await hospitalApi.createIpdPayment(encounterId, { amount: amt }); await reload(); setToast({ type: 'success', message: 'Payment recorded' }) }catch(e: any){ setToast({ type: 'error', message: e?.message || 'Failed to record payment' }) }
   }
 
   return (
@@ -86,6 +89,7 @@ export default function Billing({ encounterId }: { encounterId: string }){
         <button onClick={()=>setOpen(true)} className="btn">Add Charge</button>
       </div>
       <ChargeDialog open={open} onClose={()=>setOpen(false)} onSave={save} />
+      <Toast toast={toast} onClose={()=>setToast(null)} />
     </div>
   )
 }

@@ -9,6 +9,8 @@ const HospitalUserSchema = new Schema({
   email: { type: String },
   active: { type: Boolean, default: true, index: true },
   passwordHash: { type: String },
+  shiftId: { type: Schema.Types.ObjectId, ref: 'Hospital_Shift' },
+  shiftRestricted: { type: Boolean, default: false },
 }, { timestamps: true })
 
 export type HospitalUserDoc = {
@@ -21,6 +23,8 @@ export type HospitalUserDoc = {
   email?: string
   active: boolean
   passwordHash?: string
+  shiftId?: string
+  shiftRestricted?: boolean
   createdAt?: Date
   updatedAt?: Date
 }

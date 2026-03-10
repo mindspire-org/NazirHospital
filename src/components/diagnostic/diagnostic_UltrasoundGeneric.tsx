@@ -179,7 +179,6 @@ export async function printUltrasoundReport(input: {
   reportedAt?: string
   patient: { fullName: string; phone?: string; mrn?: string; age?: string; gender?: string; address?: string }
   value: string
-  images?: string[]
   referringConsultant?: string
 }){
   const s: any = await diagnosticApi.getSettings().catch(()=>({}))
@@ -189,25 +188,10 @@ export async function printUltrasoundReport(input: {
   const email = s?.email || ''
   const department = s?.department || 'Department of Diagnostics'
   const logo = s?.logoDataUrl || ''
-  const footer = s?.reportFooter || ''
+  const footer = s?.reportFooter || 'System Generated Report. No Signature Required.'
 
   const esc = (x: any)=> String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')
   const fmt = (iso?: string)=>{ const d = iso? new Date(iso): new Date(); return d.toLocaleDateString()+" "+d.toLocaleTimeString() }
-
-  const rawBase = (import.meta as any).env?.VITE_API_URL as string | undefined
-  const apiBase = rawBase
-    ? (/^https?:/i.test(rawBase) ? rawBase : `http://127.0.0.1:4000${rawBase}`)
-    : 'http://127.0.0.1:4000/api'
-  const backendBase = String(apiBase || '').replace(/\/api\/?$/i, '')
-  const normalizeSrc = (u: string) => {
-    const v = String(u || '').trim()
-    if (!v) return ''
-    if (/^(data:|blob:)/i.test(v)) return v
-    if (/^https?:/i.test(v)) return v
-    if (v.startsWith('/')) return `${backendBase}${v}`
-    return `${backendBase}/${v}`
-  }
-  const safeSrc = (u: string) => normalizeSrc(u).replace(/"/g, '&quot;')
   const bodyHtml = (()=>{
     const labels = ['Clinical Information','Comparison','Technique','Findings','Impression','Images']
     const set = new Set(labels)
@@ -221,18 +205,10 @@ export async function printUltrasoundReport(input: {
       buf.push(raw)
     }
     push()
-    const imgs = Array.isArray((input as any).images) ? (input as any).images.map((x: any)=>String(x||'')).filter(Boolean) : []
-    const fallbackImgs = sections['Images'] ? sections['Images'].split(/\r?\n/).map(s=>s.trim()).filter(Boolean) : []
-    const showImgs = imgs.length ? imgs : fallbackImgs
-
     let html = `<div class="title-mid">ULTRASOUND REPORT</div><div class="box">`
     for (const key of labels){
       const val = (sections as any)[key]
-      if (key==='Images'){
-        if (!showImgs.length) continue
-        html += `<div class="sec"><div class="sec-title">Images</div><div class="img-grid">${showImgs.map(u=>`<div class=\"img-item\"><img src=\"${safeSrc(u)}\" alt=\"img\"/></div>`).join('')}</div></div>`
-        continue
-      }
+      if (key==='Images' && !val) continue
       if (!(key in sections) && key!=='Clinical Information' && key!=='Comparison' && key!=='Technique' && key!=='Findings' && key!=='Impression') continue
       html += `<div class="sec"><div class="sec-title">${esc(key)}</div><div class="sec-text">${esc(val||'')}</div></div>`
     }
@@ -263,7 +239,7 @@ export async function printUltrasoundReport(input: {
     .hdr .muted{color:#64748b;font-size:12px;text-align:center}
     .dept{font-style:italic;text-align:center;margin:8px 0 4px 0}
     .hr{border-bottom:2px solid #0f172a;margin:6px 0}
-    .box{border:0;border-radius:0;padding:0;margin:8px 0}
+    .box{border:1px solid #e2e8f0;border-radius:10px;padding:6px;margin:8px 0}
     .kv{display:grid;grid-template-columns: 130px minmax(0,1fr) 130px minmax(0,1fr) 130px minmax(0,1fr);gap:4px 10px;font-size:12px;align-items:start}
     .kv > div{line-height:1.2}
     .kv > div:nth-child(2n){word-break:break-word}
